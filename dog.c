@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include "mongoose.h"
+#include "mongoose_helper.h"
 
 #include "data.h"
 #include "defines.h"
@@ -476,6 +477,15 @@ void handle_message(struct mg_connection *nc, struct http_message *hm) {
 void handle_df(struct mg_connection *nc, struct http_message *hm) {
   struct Data *data = get_data();
   char buf[256];
+  //--
+  mg_get_query_string_var(&hm->query_string, "ABC", buf, sizeof(buf));
+  mg_printf(nc, "%s",
+            "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
+            "*\r\nTransfer-Encoding: chunked\r\n\r\n");
+  // mg_printf_http_chunk(nc, buf);
+  mg_send_http_chunk(nc, "", 0);
+  return;
+  //--
   if (mg_get_http_var(&hm->body, "path", buf, sizeof(buf)) > 0) {
     struct Disk *new_disk;
     if (data->disks_head == NULL) {
