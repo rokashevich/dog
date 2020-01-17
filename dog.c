@@ -175,42 +175,46 @@ void handle_status(struct mg_connection *nc) {
 
 void *process_worker(void *voidprocess) {
   struct Process *process = (struct Process *)voidprocess;
+
+  int filedes[2];
+  if (pipe(filedes) == -1) {
+    perror("pipe");
+    exit(1);
+  }
+
   process->pid = fork();
   while (1) {
     if (process->pid == -1) {
-      printf(
-          "curl -X POST http://localhost:14157/!!! Warning: process_worker: "
-          "fork\n");
+      printf("fork error\n");
     } else if (process->pid == 0) {  // Внутри child-а.
-      prctl(PR_SET_PDEATHSIG,
-            SIGKILL);  // Убиваем child-а, если parent завершился.
+      // Убиваем child, если parent завершился.
+      prctl(PR_SET_PDEATHSIG, SIGKILL);
+
+      while ((dup2(filedes[1], STDOUT_FILENO) == -1) && (errno == EINTR)) {
+      }
+      while ((dup2(filedes[1], STDERR_FILENO) == -1) && (errno == EINTR)) {
+      }
+      close(filedes[1]);
+      close(filedes[0]);
 
       if (strlen(process->pwd)) {
         chdir(process->pwd);
       }
 
-      int fd;
-      if (strlen(process->out) > 0) {
-        fd = open(process->out, O_RDWR | O_CREAT | O_APPEND,
-                  S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
-        char *sep =
-            "------------------------------------------------------------------"
-            "--------------\n";
-        write(fd, sep, strlen(sep));
-      } else {
-        fd = open("/dev/null", O_WRONLY);
-      }
-      dup2(fd, STDOUT_FILENO);
-      dup2(fd, STDERR_FILENO);
-      close(fd);
-
-      fprintf(stdout, "Starting process with environment:\n");
+      fprintf(stdout, "----------------------------------------\n");
       for (int i = 0; process->envs[i]; ++i) {
-        printf("%s\n", process->envs[i]);
+        fprintf(stdout, "%s ", process->envs[i]);
       }
+      fprintf(stdout, "\n----------------------------------------\n");
       execvpe(process->cmds[0], process->cmds, process->envs);
       fprintf(stderr, "failed to execute \"%s\"\n", process->cmds[0]);
     } else {
+      close(filedes[1]);
+      ssize_t nread;
+      char buffer[1024];
+      while ((nread = read(filedes[0], &buffer[0], sizeof(buffer))) > 0) {
+        strncpy(process->out, buffer, 1024);
+      }
       waitpid(process->pid, NULL, 0);
       if (process->action == ACTION_KILL) {
         pthread_mutex_lock(&lock);
@@ -246,6 +250,10 @@ void *process_worker(void *voidprocess) {
       } else {
         sleep(1);
         process->restarts_counter++;
+        if (pipe(filedes) == -1) {
+          perror("pipe");
+          exit(1);
+        }
         process->pid = fork();
       }
     }
@@ -276,7 +284,6 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
   // pwd=/opt
   // &env=LD_LIBRARY_PATH=.:../lib DISPLAY=$DISPLAY
   // &cmd=/usr/bin/app -a -r -g -u -m -e -n -t -s"
-  // &log=/var/log/app.stdout.stderr.log
   // и заполняем соотвествующие поля в структуре Process.
   char buf[1024];
 
@@ -292,9 +299,8 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
   new_process->cmd = malloc((strlen(buf) + 1) * sizeof(char));
   strcpy(new_process->cmd, buf);
 
-  mg_get_http_var(&hm->body, "out", buf, sizeof(buf));
-  new_process->out = malloc((strlen(buf) + 1) * sizeof(char));
-  strcpy(new_process->out, buf);
+  new_process->out = malloc(1000000);
+  *(new_process->out) = 0;
 
   new_process->envs = string_to_string_array(new_process->env);
   new_process->cmds = string_to_string_array(new_process->cmd);
@@ -474,18 +480,28 @@ void handle_message(struct mg_connection *nc, struct http_message *hm) {
   pthread_mutex_unlock(&lock);
 }
 
-void handle_df(struct mg_connection *nc, struct http_message *hm) {
-  struct Data *data = get_data();
-  char buf[256];
-  //--
-  mg_get_query_string_var(&hm->query_string, "ABC", buf, sizeof(buf));
+void handle_out(struct mg_connection *nc, struct http_message *hm) {
   mg_printf(nc, "%s",
             "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
             "*\r\nTransfer-Encoding: chunked\r\n\r\n");
-  // mg_printf_http_chunk(nc, buf);
+
+  char buf[1024];
+  if (mg_get_http_var(&hm->body, "cmd", buf, sizeof(buf)) > 0) {
+    struct Process *current_process = processes_head;
+    while (current_process != NULL) {
+      if (strcmp(current_process->cmd, buf) == 0) {
+        mg_printf_http_chunk(nc, current_process->out);
+        break;
+      }
+      current_process = current_process->next;
+    }
+  }
   mg_send_http_chunk(nc, "", 0);
-  return;
-  //--
+}
+
+void handle_df(struct mg_connection *nc, struct http_message *hm) {
+  struct Data *data = get_data();
+  char buf[256];
   if (mg_get_http_var(&hm->body, "path", buf, sizeof(buf)) > 0) {
     struct Disk *new_disk;
     if (data->disks_head == NULL) {
@@ -532,6 +548,8 @@ static void ev_handler(struct mg_connection *nc, int ev, void *ev_data) {
         handle_killall(nc);
       else if (mg_vcmp(&hm->uri, "/message") == 0)
         handle_message(nc, hm);
+      else if (mg_vcmp(&hm->uri, "/out") == 0)
+        handle_out(nc, hm);
       else if (mg_vcmp(&hm->uri, "/df") == 0)
         handle_df(nc, hm);
       else if (mg_vcmp(&hm->uri, "/undf") == 0)
