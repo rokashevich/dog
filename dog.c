@@ -263,6 +263,14 @@ void *process_worker(void *voidprocess) {
 
 void handle_watch(struct mg_connection *nc, struct http_message *hm) {
   pthread_mutex_lock(&lock);
+
+  // Ищем незанятый unsigned char для id.
+  char buf[1024];
+  struct Process *current_process = processes_head;
+  while (current_process != NULL) {
+    current_process = current_process->next;
+  }
+
   struct Process *new_process;
 
   if (processes_head == NULL) {
