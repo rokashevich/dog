@@ -209,15 +209,15 @@ void *process_worker(void *voidprocess) {
       // сосотояние окружения, в котором процесс запускается: переменные
       // окружения, рабочий катталог, параметры запуска. Для того чтобы можно
       // было удобнее отладиться вручную в консоли, в случае необходимости.
-      //      fprintf(stdout,
-      //              "---------------------------------------------------------------"
-      //              "----------------\n");
-      //      for (int i = 0; process->envs[i]; ++i) {
-      //        fprintf(stdout, "%s ", process->envs[i]);
-      //      }
-      //      fprintf(stdout,
-      //              "---------------------------------------------------------------"
-      //              "----------------\n");
+      fprintf(stdout, "----------------------------------------\n");
+      fprintf(stdout, "cmd: %s\n", process->cmd);
+      fprintf(stdout, "env: ");
+      for (int i = 0; process->envs[i]; ++i) {
+        fprintf(stdout, "%s ", process->envs[i]);
+      }
+      fprintf(stdout, "\n");
+      fprintf(stdout, "pwd: %s\n", process->pwd);
+      fprintf(stdout, "out:\n");
 
       execvpe(process->cmds[0], process->cmds, process->envs);
       fprintf(stderr, "failed to execute \"%s\"\n", process->cmds[0]);
@@ -233,8 +233,6 @@ void *process_worker(void *voidprocess) {
           memcpy(process->circular_buffer + process->circular_buffer_pos,
                  buffer, (unsigned long)nread);
           process->circular_buffer_pos += (unsigned long)nread;
-          //          printf("read %i (%s) into cir_buf at %i\n", nread, buffer,
-          //                 process->circular_buffer_pos);
         }
         // Полученный stdout/stderr надо разбивать на две части.
         else {
@@ -242,13 +240,7 @@ void *process_worker(void *voidprocess) {
                  buffer, buffer_right_side_size);
           process->circular_buffer_pos =
               (unsigned long)nread - buffer_right_side_size;
-          memcpy(process->circular_buffer,
-                 buffer + process->circular_buffer_pos,
-                 process->circular_buffer_pos);
-          //          printf("split %i (%s) into cir_buf at %i\n", nread,
-          //          buffer,
-          //                 process->circular_buffer_pos);
-          printf(">%i %ld %ld\n", nread, buffer_right_side_size,
+          memcpy(process->circular_buffer, buffer + buffer_right_side_size,
                  process->circular_buffer_pos);
         }
       }
