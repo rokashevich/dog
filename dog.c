@@ -131,6 +131,10 @@ void gen_json(struct Data *data) {
   struct Process *current_process = processes_head;
   while (current_process != NULL) {
     p = qstrcat(p, "{");
+    p = qstrcat(p, "\"id\":\"");
+    sprintf(b, "%u,", current_process->id);
+    p = qstrcat(p, b);
+    p = qstrcat(p, "\",");
     p = qstrcat(p, "\"pwd\":\"");
     p = qstrcat(p, current_process->pwd);
     p = qstrcat(p, "\",");
@@ -190,6 +194,10 @@ void *process_worker(void *voidprocess) {
       // Убиваем child, если parent завершился.
       prctl(PR_SET_PDEATHSIG, SIGKILL);
 
+      if (strlen(process->pwd)) {
+        chdir(process->pwd);
+      }
+
       while ((dup2(filedes[1], STDOUT_FILENO) == -1) && (errno == EINTR)) {
       }
       while ((dup2(filedes[1], STDERR_FILENO) == -1) && (errno == EINTR)) {
@@ -197,15 +205,20 @@ void *process_worker(void *voidprocess) {
       close(filedes[1]);
       close(filedes[0]);
 
-      if (strlen(process->pwd)) {
-        chdir(process->pwd);
-      }
+      // Перед стартом процесса и перехвата его stdout и stderr пишем в stdout
+      // сосотояние окружения, в котором процесс запускается: переменные
+      // окружения, рабочий катталог, параметры запуска. Для того чтобы можно
+      // было удобнее отладиться вручную в консоли, в случае необходимости.
+      //      fprintf(stdout,
+      //              "---------------------------------------------------------------"
+      //              "----------------\n");
+      //      for (int i = 0; process->envs[i]; ++i) {
+      //        fprintf(stdout, "%s ", process->envs[i]);
+      //      }
+      //      fprintf(stdout,
+      //              "---------------------------------------------------------------"
+      //              "----------------\n");
 
-      fprintf(stdout, "----------------------------------------\n");
-      for (int i = 0; process->envs[i]; ++i) {
-        fprintf(stdout, "%s ", process->envs[i]);
-      }
-      fprintf(stdout, "\n----------------------------------------\n");
       execvpe(process->cmds[0], process->cmds, process->envs);
       fprintf(stderr, "failed to execute \"%s\"\n", process->cmds[0]);
     } else {
@@ -213,7 +226,31 @@ void *process_worker(void *voidprocess) {
       ssize_t nread;
       char buffer[1024];
       while ((nread = read(filedes[0], &buffer[0], sizeof(buffer))) > 0) {
-        strncpy(process->out, buffer, 1024);
+        unsigned long buffer_right_side_size =
+            sizeof(process->circular_buffer) - process->circular_buffer_pos;
+        // Полученный stdout/stderr влезает в правую часть буфера целиком.
+        if (buffer_right_side_size >= (unsigned long)nread) {
+          memcpy(process->circular_buffer + process->circular_buffer_pos,
+                 buffer, (unsigned long)nread);
+          process->circular_buffer_pos += (unsigned long)nread;
+          //          printf("read %i (%s) into cir_buf at %i\n", nread, buffer,
+          //                 process->circular_buffer_pos);
+        }
+        // Полученный stdout/stderr надо разбивать на две части.
+        else {
+          memcpy(process->circular_buffer + process->circular_buffer_pos,
+                 buffer, buffer_right_side_size);
+          process->circular_buffer_pos =
+              (unsigned long)nread - buffer_right_side_size;
+          memcpy(process->circular_buffer,
+                 buffer + process->circular_buffer_pos,
+                 process->circular_buffer_pos);
+          //          printf("split %i (%s) into cir_buf at %i\n", nread,
+          //          buffer,
+          //                 process->circular_buffer_pos);
+          printf(">%i %ld %ld\n", nread, buffer_right_side_size,
+                 process->circular_buffer_pos);
+        }
       }
       waitpid(process->pid, NULL, 0);
       if (process->action == ACTION_KILL) {
@@ -264,15 +301,7 @@ void *process_worker(void *voidprocess) {
 void handle_watch(struct mg_connection *nc, struct http_message *hm) {
   pthread_mutex_lock(&lock);
 
-  // Ищем незанятый unsigned char для id.
-  char buf[1024];
-  struct Process *current_process = processes_head;
-  while (current_process != NULL) {
-    current_process = current_process->next;
-  }
-
   struct Process *new_process;
-
   if (processes_head == NULL) {
     processes_head = malloc(sizeof(struct Process));
     processes_head->next = NULL;
@@ -287,14 +316,18 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
     new_process->next = NULL;
   }
 
+  // Счётчик последнего выданного id.
+  static unsigned int largest_id = 0;
+  new_process->id = ++largest_id;
+
   // Читаем HTTP POST запрос вида:
   // curl -X POST http://localhost:14157/watch -d "
   // pwd=/opt
   // &env=LD_LIBRARY_PATH=.:../lib DISPLAY=$DISPLAY
   // &cmd=/usr/bin/app -a -r -g -u -m -e -n -t -s"
   // и заполняем соотвествующие поля в структуре Process.
-  char buf[1024];
 
+  char buf[1024];
   mg_get_http_var(&hm->body, "pwd", buf, sizeof(buf));
   new_process->pwd = malloc((strlen(buf) + 1) * sizeof(char));
   strcpy(new_process->pwd, buf);
@@ -307,8 +340,8 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
   new_process->cmd = malloc((strlen(buf) + 1) * sizeof(char));
   strcpy(new_process->cmd, buf);
 
-  new_process->out = malloc(1000000);
-  *(new_process->out) = 0;
+  new_process->circular_buffer_pos = 0;
+  memset(new_process->circular_buffer, '\0', BUFFER_OUT);
 
   new_process->envs = string_to_string_array(new_process->env);
   new_process->cmds = string_to_string_array(new_process->cmd);
@@ -318,7 +351,7 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
 
   pthread_mutex_unlock(&lock);
 
-  // Запускаем поток отслеживания дога.
+  // Запускаем поток отслеживания запущенного запрошенного процесса.
   pthread_t tid[2];
   if (pthread_create(&(tid[0]), NULL, &process_worker, new_process) != 0) {
     printf("!!! Warning: pthread_create: process_worker\n");
@@ -493,17 +526,31 @@ void handle_out(struct mg_connection *nc, struct http_message *hm) {
             "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
             "*\r\nTransfer-Encoding: chunked\r\n\r\n");
 
-  char buf[1024];
-  if (mg_get_http_var(&hm->body, "cmd", buf, sizeof(buf)) > 0) {
+  char buf[BUFFER_OUT];
+  unsigned long length = 0;
+  if (mg_get_query_string_var(&hm->query_string, "id", buf, sizeof(buf)) > 0) {
+    unsigned int request_id = (unsigned int)atoi(buf);
     struct Process *current_process = processes_head;
     while (current_process != NULL) {
-      if (strcmp(current_process->cmd, buf) == 0) {
-        mg_printf_http_chunk(nc, current_process->out);
+      if (current_process->id == request_id) {
+        for (unsigned long i = current_process->circular_buffer_pos;
+             i < BUFFER_OUT; ++i, ++length) {
+          char c = current_process->circular_buffer[i];
+          if (c == '\0') break;
+          buf[length] = c;
+        }
+        for (unsigned long i = 0; i < current_process->circular_buffer_pos;
+             ++i, ++length) {
+          char c = current_process->circular_buffer[i];
+          buf[length] = c;
+        }
+        buf[length] = '\0';
         break;
       }
       current_process = current_process->next;
     }
   }
+  mg_printf_http_chunk(nc, buf);
   mg_send_http_chunk(nc, "", 0);
 }
 

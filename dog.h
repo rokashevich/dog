@@ -3,6 +3,7 @@
 
 #include <pthread.h>
 #include <unistd.h>
+#include "defines.h"
 #include "mongoose.h"
 
 enum Action {
@@ -17,11 +18,13 @@ enum Action {
 
 struct Process {
   // Для хранения параметров запуска в переданном через POST запрос виде.
-  unsigned char id;  // Уникальный идентификатор (не pid!).
-  char *pwd;         // /opt/sandbox/bin
-  char *env;         // DISPLAY=$DISPLAY LD_LIBRARY_PATH=.:../lib
-  char *cmd;         // program --arg-one 1 --arg-two 2
-  char *out;         // Stdout + stderr процесса.
+  unsigned int id;  // Уникальный идентификатор (не pid!).
+  char *pwd;        // /opt/sandbox/bin
+  char *env;        // DISPLAY=$DISPLAY LD_LIBRARY_PATH=.:../lib
+  char *cmd;        // program --arg-one 1 --arg-two 2
+
+  char circular_buffer[BUFFER_OUT];  // Мегабайт для stdout + stderr.
+  unsigned long circular_buffer_pos;
 
   // Для хранения двухмерного массива параметров запуска в том виде,
   // в котором они используются для вызова execvpe().
