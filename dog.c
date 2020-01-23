@@ -132,7 +132,7 @@ void gen_json(struct Data *data) {
   while (current_process != NULL) {
     p = qstrcat(p, "{");
     p = qstrcat(p, "\"id\":\"");
-    sprintf(b, "%u,", current_process->id);
+    sprintf(b, "%u", current_process->id);
     p = qstrcat(p, b);
     p = qstrcat(p, "\",");
     p = qstrcat(p, "\"pwd\":\"");
@@ -209,16 +209,14 @@ void *process_worker(void *voidprocess) {
       // сосотояние окружения, в котором процесс запускается: переменные
       // окружения, рабочий катталог, параметры запуска. Для того чтобы можно
       // было удобнее отладиться вручную в консоли, в случае необходимости.
-      fprintf(stdout, "----------------------------------------\n");
-      fprintf(stdout, "cmd: %s\n", process->cmd);
-      fprintf(stdout, "env: ");
+      fprintf(stdout, "***\n");
+      fprintf(stdout, "%i\n", process->restarts_counter);
+      fprintf(stdout, "cd %s && ", process->pwd);
       for (int i = 0; process->envs[i]; ++i) {
         fprintf(stdout, "%s ", process->envs[i]);
       }
-      fprintf(stdout, "\n");
-      fprintf(stdout, "pwd: %s\n", process->pwd);
-      fprintf(stdout, "out:\n");
-
+      fprintf(stdout, "%s\n", process->cmd);
+      fprintf(stdout, "***\n");
       execvpe(process->cmds[0], process->cmds, process->envs);
       fprintf(stderr, "failed to execute \"%s\"\n", process->cmds[0]);
     } else {
@@ -333,7 +331,7 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
   strcpy(new_process->cmd, buf);
 
   new_process->circular_buffer_pos = 0;
-  memset(new_process->circular_buffer, '\0', BUFFER_OUT);
+  memset(new_process->circular_buffer, '\0', BUFFER_OUT_SIZE);
 
   new_process->envs = string_to_string_array(new_process->env);
   new_process->cmds = string_to_string_array(new_process->cmd);
@@ -518,7 +516,7 @@ void handle_out(struct mg_connection *nc, struct http_message *hm) {
             "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
             "*\r\nTransfer-Encoding: chunked\r\n\r\n");
 
-  char buf[BUFFER_OUT];
+  char buf[BUFFER_OUT_SIZE];
   unsigned long length = 0;
   if (mg_get_query_string_var(&hm->query_string, "id", buf, sizeof(buf)) > 0) {
     unsigned int request_id = (unsigned int)atoi(buf);
@@ -526,7 +524,7 @@ void handle_out(struct mg_connection *nc, struct http_message *hm) {
     while (current_process != NULL) {
       if (current_process->id == request_id) {
         for (unsigned long i = current_process->circular_buffer_pos;
-             i < BUFFER_OUT; ++i, ++length) {
+             i < BUFFER_OUT_SIZE; ++i, ++length) {
           char c = current_process->circular_buffer[i];
           if (c == '\0') break;
           buf[length] = c;

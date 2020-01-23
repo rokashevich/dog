@@ -23,7 +23,7 @@ struct Process {
   char *env;        // DISPLAY=$DISPLAY LD_LIBRARY_PATH=.:../lib
   char *cmd;        // program --arg-one 1 --arg-two 2
 
-  char circular_buffer[BUFFER_OUT];  // Мегабайт для stdout + stderr.
+  char circular_buffer[BUFFER_OUT_SIZE];  // Мегабайт для stdout + stderr.
   unsigned long circular_buffer_pos;
 
   // Для хранения двухмерного массива параметров запуска в том виде,
