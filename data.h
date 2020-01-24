@@ -65,4 +65,8 @@ void prepare_data(struct Data *data); // Выполняется раз при з
 
 void update_data(struct Data *data); // Выполняется с периодичностью.
 
+static inline void get_current_rx_tx_for_iface(unsigned long long *rx,
+                                               unsigned long long *tx,
+                                               const char *iface);
+
 #endif // DATA_H

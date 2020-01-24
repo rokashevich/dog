@@ -614,7 +614,7 @@ void *worker() {
     update_data(data);
     gen_json(data);
     pthread_mutex_unlock(&lock);
-    sleep(1);
+    sleep(SLEEP);
   }
 }
 
