@@ -363,22 +363,29 @@ void update_data(struct Data *data) {
     // Обновляем текущие показания скоростей скачивания/закачивания байт в
     // секунду. tx_bytes и rx_bytes обнуляются после 4Гб, поэтому когда на такое
     // натыкаемся, пропускаем цикл оставляя предыдущее значение.
+    //
+    // Так же обновляем максимально достигнутые за время мониторинга показатели
+    // скоростей tx/rx.
     double delta_bytes;
     if (data->net[i].tx >= tx_prev) {
       delta_bytes = data->net[i].tx - tx_prev;
-      data->net[i].current_tx_speed = (unsigned long long)(delta_bytes / delta);
+      unsigned long long current_tx_speed =
+          (unsigned long long)(delta_bytes / delta);
+      data->net[i].current_tx_speed = current_tx_speed;
+
+      if (current_tx_speed > data->net[i].max_tx_speed)
+        data->net[i].max_tx_speed = current_tx_speed;
     }
     if (data->net[i].rx >= rx_prev) {
       delta_bytes = data->net[i].rx - rx_prev;
-      data->net[i].current_rx_speed = (unsigned long long)(delta_bytes / delta);
+      unsigned long long current_rx_speed =
+          (unsigned long long)(delta_bytes / delta);
+      data->net[i].current_rx_speed = current_rx_speed;
+
+      if (current_rx_speed > data->net[i].max_rx_speed)
+        data->net[i].max_rx_speed = current_rx_speed;
     }
 
-    // Обновляем максимально достигнутые за время мониторинга показатели
-    // скоростей tx/rx.
-    if (data->net[i].current_tx_speed > data->net[i].max_tx_speed)
-      data->net[i].max_tx_speed = data->net[i].current_tx_speed;
-    if (data->net[i].current_rx_speed > data->net[i].max_rx_speed)
-      data->net[i].max_rx_speed = data->net[i].current_rx_speed;
   }
 }
 
