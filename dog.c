@@ -22,9 +22,6 @@
 #include "dog.h"
 #include "helpers.h"
 
-static struct Process *processes_head = NULL;
-static struct Msg *msgs_head = NULL;
-
 pthread_mutex_t lock;
 
 void gen_json(struct Data *data) {
@@ -128,7 +125,7 @@ void gen_json(struct Data *data) {
   }
   p = qstrcat(p, "],");
   p = qstrcat(p, "\"watching\":[");
-  struct Process *current_process = processes_head;
+  struct Process *current_process = data->processes_head;
   while (current_process != NULL) {
     p = qstrcat(p, "{");
     p = qstrcat(p, "\"id\":\"");
@@ -145,9 +142,12 @@ void gen_json(struct Data *data) {
     p = qstrcat(p, current_process->cmd);
     p = qstrcat(p, "\",");
     p = qstrcat(p, "\"pid\":");
-    sprintf(b, "%u,", current_process->pid);
+    sprintf(b, "%u", current_process->pid);
     p = qstrcat(p, b);
-    p = qstrcat(p, "\"restarts_counter\":");
+    p = qstrcat(p, ",\"rss\":");
+    sprintf(b, "%u", current_process->rss);
+    p = qstrcat(p, b);
+    p = qstrcat(p, ",\"restarts_counter\":");
     sprintf(b, "%u", current_process->restarts_counter);
     p = qstrcat(p, b);
     p = qstrcat(p, "}");
@@ -156,7 +156,7 @@ void gen_json(struct Data *data) {
   }
   p = qstrcat(p, "],");
   p = qstrcat(p, "\"msgs\":[");
-  struct Msg *current_msg = msgs_head;
+  struct Msg *current_msg = data->msgs_head;
   while (current_msg != NULL) {
     p = qstrcat(p, "\"");
     p = qstrcat(p, current_msg->msg);
@@ -179,6 +179,7 @@ void handle_status(struct mg_connection *nc) {
 
 void *process_worker(void *voidprocess) {
   struct Process *process = (struct Process *)voidprocess;
+  struct Data *data = get_data();
 
   int filedes[2];
   if (pipe(filedes) == -1) {
@@ -243,16 +244,16 @@ void *process_worker(void *voidprocess) {
         }
       }
       waitpid(process->pid, NULL, 0);
+      pthread_mutex_lock(&lock);
       if (process->action == ACTION_KILL) {
-        pthread_mutex_lock(&lock);
-        struct Process *current_process = processes_head;
+        struct Process *current_process = data->processes_head;
         struct Process *prev_process = NULL;
         struct Process *free_process = NULL;
         while (current_process != NULL) {
           if (process == current_process) {
             free_process = current_process;
             if (prev_process == NULL) {
-              current_process = processes_head = current_process->next;
+              current_process = data->processes_head = current_process->next;
             } else {
               prev_process->next = current_process->next;
               current_process = prev_process->next;
@@ -268,7 +269,6 @@ void *process_worker(void *voidprocess) {
             current_process = current_process->next;
           }
         }
-        pthread_mutex_unlock(&lock);
         break;
       } else if (process->action == ACTION_PAUSE) {
         process->pid = 0;
@@ -283,6 +283,7 @@ void *process_worker(void *voidprocess) {
         }
         process->pid = fork();
       }
+      pthread_mutex_unlock(&lock);
     }
   }
   return voidprocess;
@@ -290,14 +291,14 @@ void *process_worker(void *voidprocess) {
 
 void handle_watch(struct mg_connection *nc, struct http_message *hm) {
   pthread_mutex_lock(&lock);
-
+  struct Data *data = get_data();
   struct Process *new_process;
-  if (processes_head == NULL) {
-    processes_head = malloc(sizeof(struct Process));
-    processes_head->next = NULL;
-    new_process = processes_head;
+  if (data->processes_head == NULL) {
+    data->processes_head = malloc(sizeof(struct Process));
+    data->processes_head->next = NULL;
+    new_process = data->processes_head;
   } else {
-    new_process = processes_head;
+    new_process = data->processes_head;
     while (new_process->next != NULL) {
       new_process = new_process->next;
     }
@@ -353,9 +354,10 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
 }
 
 void handle_pause(struct mg_connection *nc, struct http_message *hm) {
+  struct Data *data = get_data();
   char buf[1024];
   if (mg_get_http_var(&hm->body, "pattern", buf, sizeof(buf))) {
-    struct Process *current_process = processes_head;
+    struct Process *current_process = data->processes_head;
     while (current_process != NULL) {
       if (match(buf, current_process->cmd, 0, 0) && current_process->pid > 0) {
         current_process->action = ACTION_PAUSE;
@@ -372,9 +374,10 @@ void handle_pause(struct mg_connection *nc, struct http_message *hm) {
 }
 
 void handle_resume(struct mg_connection *nc, struct http_message *hm) {
+  struct Data *data = get_data();
   char buf[1024];
   mg_get_http_var(&hm->body, "pattern", buf, sizeof(buf));
-  struct Process *current_process = processes_head;
+  struct Process *current_process = data->processes_head;
   while (current_process != NULL) {
     if (match(buf, current_process->cmd, 0, 0) && current_process->pid == 0) {
       current_process->action = ACTION_NONE;
@@ -426,8 +429,9 @@ void handle_undf(struct mg_connection *nc) {
 }
 
 void handle_killall(struct mg_connection *nc) {
+  struct Data *data = get_data();
   pthread_mutex_lock(&lock);
-  struct Process *current_process = processes_head;
+  struct Process *current_process = data->processes_head;
   struct Process *prev_process = NULL;
   struct Process *free_process = NULL;
   while (current_process != NULL) {
@@ -438,7 +442,7 @@ void handle_killall(struct mg_connection *nc) {
     } else {  // процесс на пузе
       free_process = current_process;
       if (prev_process == NULL) {
-        current_process = processes_head = current_process->next;
+        current_process = data->processes_head = current_process->next;
       } else {
         prev_process->next = current_process->next;
         current_process = prev_process->next;
@@ -460,19 +464,21 @@ void handle_killall(struct mg_connection *nc) {
 }
 
 void handle_message(struct mg_connection *nc, struct http_message *hm) {
+  struct Data *data = get_data();
   pthread_mutex_lock(&lock);
   char buf[1024];
   if (mg_get_http_var(&hm->body, "del", buf, sizeof(buf)) > 0) {
     struct Msg *prev_msg = NULL;
-    struct Msg *current_msg = msgs_head;
+    struct Msg *current_msg = data->msgs_head;
     while (current_msg != NULL) {
       if (match(buf, current_msg->msg, 0, 0)) {
-        if (msgs_head == current_msg) {  // If node to be deleted is head node.
-          msgs_head = current_msg->next;
+        if (data->msgs_head ==
+            current_msg) {  // If node to be deleted is head node.
+          data->msgs_head = current_msg->next;
           current_msg->next = NULL;
           free(current_msg->msg);
           free(current_msg);
-          current_msg = msgs_head;
+          current_msg = data->msgs_head;
         } else if (prev_msg != NULL) {
           prev_msg->next = current_msg->next;
           current_msg->next = NULL;
@@ -488,12 +494,12 @@ void handle_message(struct mg_connection *nc, struct http_message *hm) {
   }
   if (mg_get_http_var(&hm->body, "add", buf, sizeof(buf)) > 0) {
     struct Msg *new_msg;
-    if (msgs_head == NULL) {
-      msgs_head = malloc(sizeof(struct Process));
-      msgs_head->next = NULL;
-      new_msg = msgs_head;
+    if (data->msgs_head == NULL) {
+      data->msgs_head = malloc(sizeof(struct Process));
+      data->msgs_head->next = NULL;
+      new_msg = data->msgs_head;
     } else {
-      new_msg = msgs_head;
+      new_msg = data->msgs_head;
       while (new_msg->next != NULL) {
         new_msg = new_msg->next;
       }
@@ -516,11 +522,12 @@ void handle_out(struct mg_connection *nc, struct http_message *hm) {
             "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
             "*\r\nTransfer-Encoding: chunked\r\n\r\n");
 
+  struct Data *data = get_data();
   char buf[BUFFER_OUT_SIZE];
   unsigned long length = 0;
   if (mg_get_query_string_var(&hm->query_string, "id", buf, sizeof(buf)) > 0) {
     unsigned int request_id = (unsigned int)atoi(buf);
-    struct Process *current_process = processes_head;
+    struct Process *current_process = data->processes_head;
     while (current_process != NULL) {
       if (current_process->id == request_id) {
         for (unsigned long i = current_process->circular_buffer_pos;

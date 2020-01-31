@@ -3,40 +3,7 @@
 
 #include <pthread.h>
 #include <unistd.h>
-#include "defines.h"
 #include "mongoose.h"
-
-enum Action {
-  ACTION_NONE,
-  ACTION_STOP,
-  ACTION_START,
-  ACTION_KILL,
-  ACTION_FREE,
-  ACTION_PAUSE,
-  ACTION_RESUME
-};
-
-struct Process {
-  // Для хранения параметров запуска в переданном через POST запрос виде.
-  unsigned int id;  // Уникальный идентификатор (не pid!).
-  char *pwd;        // /opt/sandbox/bin
-  char *env;        // DISPLAY=$DISPLAY LD_LIBRARY_PATH=.:../lib
-  char *cmd;        // program --arg-one 1 --arg-two 2
-
-  char circular_buffer[BUFFER_OUT_SIZE];  // Мегабайт для stdout + stderr.
-  unsigned long circular_buffer_pos;
-
-  // Для хранения двухмерного массива параметров запуска в том виде,
-  // в котором они используются для вызова execvpe().
-  char **envs;
-  char **cmds;
-
-  pid_t pid;
-  unsigned int restarts_counter;
-  struct Process *next;
-
-  int action;
-};
 
 struct Msg {
   char *msg;

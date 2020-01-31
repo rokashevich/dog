@@ -385,7 +385,13 @@ void update_data(struct Data *data) {
       if (current_rx_speed > data->net[i].max_rx_speed)
         data->net[i].max_rx_speed = current_rx_speed;
     }
+  }
 
+  // Обновляем данные по мониторингу запущенных процессов.
+  struct Process *current_process = data->processes_head;
+  while (current_process != NULL) {
+    get_rss_by_pid(&current_process->rss, current_process->pid);
+    current_process = current_process->next;
   }
 }
 
@@ -418,4 +424,24 @@ static inline void get_current_rx_tx_for_iface(unsigned long long *rx,
     }
     fclose(f);
   }
+}
+
+static inline void get_rss_by_pid(int *rss, const pid_t pid) {
+  char buf[BUFFER_SIZE_DEFAULT];
+  sprintf(buf, "/proc/%i/statm", pid);
+  FILE *f = fopen(buf, "r");
+  if (!f) {
+    *rss = 0;
+    return;
+  }
+  if (fscanf(f, "%*d %d", rss) != 1) {
+    *rss = 0;
+    fclose(f);
+    return;
+  }
+  int page_size = (int)sysconf(_SC_PAGE_SIZE);
+  *rss = *rss * page_size;
+
+  fclose(f);
+  return;
 }

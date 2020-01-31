@@ -4,6 +4,40 @@
 // worker в неё пишет, handle_status из неё читатет
 
 #include <time.h>
+#include "defines.h"
+
+enum Action {
+  ACTION_NONE,
+  ACTION_STOP,
+  ACTION_START,
+  ACTION_KILL,
+  ACTION_FREE,
+  ACTION_PAUSE,
+  ACTION_RESUME
+};
+
+struct Process {
+  // Для хранения параметров запуска в переданном через POST запрос виде.
+  unsigned int id;  // Уникальный идентификатор (не pid!).
+  char *pwd;        // /opt/sandbox/bin
+  char *env;        // DISPLAY=$DISPLAY LD_LIBRARY_PATH=.:../lib
+  char *cmd;        // program --arg-one 1 --arg-two 2
+
+  char circular_buffer[BUFFER_OUT_SIZE];  // Мегабайт для stdout + stderr.
+  unsigned long circular_buffer_pos;
+
+  // Для хранения двухмерного массива параметров запуска в том виде,
+  // в котором они используются для вызова execvpe().
+  char **envs;
+  char **cmds;
+
+  pid_t pid;
+  unsigned int restarts_counter;
+  struct Process *next;
+
+  int action;
+  int rss;
+};
 
 struct Disk {
   char* path;
@@ -13,6 +47,9 @@ struct Disk {
 };
 
 struct Data {
+  struct Process *processes_head;
+  struct Msg *msgs_head;
+
   char hostname[64];
   char boot_id[37]; // /proc/sys/kernel/random/boot_id > 7ef3d79c-15e2-42fe-81b2-947c123fbf4b
   struct timespec time;
@@ -68,5 +105,7 @@ void update_data(struct Data *data); // Выполняется с периоди
 static inline void get_current_rx_tx_for_iface(unsigned long long *rx,
                                                unsigned long long *tx,
                                                const char *iface);
+
+static inline void get_rss_by_pid(int *rss, const pid_t pid);
 
 #endif // DATA_H
