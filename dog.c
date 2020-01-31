@@ -169,12 +169,16 @@ void gen_json(struct Data *data) {
 }
 
 void handle_status(struct mg_connection *nc) {
+  pthread_mutex_lock(&lock);
+
   struct Data *data = get_data();
   mg_printf(nc, "%s",
             "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
             "*\r\nTransfer-Encoding: chunked\r\n\r\n");
   mg_printf_http_chunk(nc, data->json);
   mg_send_http_chunk(nc, "", 0);
+
+  pthread_mutex_unlock(&lock);
 }
 
 void *process_worker(void *voidprocess) {
@@ -244,8 +248,9 @@ void *process_worker(void *voidprocess) {
         }
       }
       waitpid(process->pid, NULL, 0);
-      pthread_mutex_lock(&lock);
+
       if (process->action == ACTION_KILL) {
+        pthread_mutex_lock(&lock);
         struct Process *current_process = data->processes_head;
         struct Process *prev_process = NULL;
         struct Process *free_process = NULL;
@@ -269,6 +274,7 @@ void *process_worker(void *voidprocess) {
             current_process = current_process->next;
           }
         }
+        pthread_mutex_unlock(&lock);
         break;
       } else if (process->action == ACTION_PAUSE) {
         process->pid = 0;
@@ -283,7 +289,6 @@ void *process_worker(void *voidprocess) {
         }
         process->pid = fork();
       }
-      pthread_mutex_unlock(&lock);
     }
   }
   return voidprocess;
@@ -355,6 +360,7 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
 
 void handle_pause(struct mg_connection *nc, struct http_message *hm) {
   struct Data *data = get_data();
+  pthread_mutex_lock(&lock);
   char buf[1024];
   if (mg_get_http_var(&hm->body, "pattern", buf, sizeof(buf))) {
     struct Process *current_process = data->processes_head;
@@ -371,6 +377,7 @@ void handle_pause(struct mg_connection *nc, struct http_message *hm) {
             "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
             "*\r\nTransfer-Encoding: chunked\r\n\r\n");
   mg_send_http_chunk(nc, "", 0);
+  pthread_mutex_unlock(&lock);
 }
 
 void handle_resume(struct mg_connection *nc, struct http_message *hm) {
@@ -464,8 +471,10 @@ void handle_killall(struct mg_connection *nc) {
 }
 
 void handle_message(struct mg_connection *nc, struct http_message *hm) {
+  printf("handle message 1\n");
   struct Data *data = get_data();
   pthread_mutex_lock(&lock);
+  printf("handle message 2\n");
   char buf[1024];
   if (mg_get_http_var(&hm->body, "del", buf, sizeof(buf)) > 0) {
     struct Msg *prev_msg = NULL;
@@ -515,6 +524,7 @@ void handle_message(struct mg_connection *nc, struct http_message *hm) {
             "*\r\nTransfer-Encoding: chunked\r\n\r\n");
   mg_send_http_chunk(nc, "", 0);
   pthread_mutex_unlock(&lock);
+  printf("handle message 3\n");
 }
 
 void handle_out(struct mg_connection *nc, struct http_message *hm) {
@@ -617,10 +627,13 @@ static void ev_handler(struct mg_connection *nc, int ev, void *ev_data) {
 void *worker() {
   struct Data *data = get_data();
   while (1) {
+    printf("update data 1\n");
     pthread_mutex_lock(&lock);
+    printf("update data 2\n");
     update_data(data);
     gen_json(data);
     pthread_mutex_unlock(&lock);
+    printf("update data 3\n");
     sleep(SLEEP);
   }
 }
