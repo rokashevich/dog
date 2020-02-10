@@ -426,7 +426,7 @@ static inline void get_current_rx_tx_for_iface(unsigned long long *rx,
   }
 }
 
-static inline void get_rss_by_pid(int *rss, const pid_t pid) {
+static inline void get_rss_by_pid(unsigned long long *rss, const pid_t pid) {
   char buf[BUFFER_SIZE_DEFAULT];
   sprintf(buf, "/proc/%i/statm", pid);
   FILE *f = fopen(buf, "r");
@@ -434,12 +434,12 @@ static inline void get_rss_by_pid(int *rss, const pid_t pid) {
     *rss = 0;
     return;
   }
-  if (fscanf(f, "%*d %d", rss) != 1) {
+  if (fscanf(f, "%*d %llu", rss) != 1) {
     *rss = 0;
     fclose(f);
     return;
   }
-  int page_size = (int)sysconf(_SC_PAGE_SIZE);
+  unsigned long long page_size = (unsigned long long)sysconf(_SC_PAGE_SIZE);
   *rss = *rss * page_size;
 
   fclose(f);

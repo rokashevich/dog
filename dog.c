@@ -145,7 +145,7 @@ void gen_json(struct Data *data) {
     sprintf(b, "%u", current_process->pid);
     p = qstrcat(p, b);
     p = qstrcat(p, ",\"rss\":");
-    sprintf(b, "%u", current_process->rss);
+    sprintf(b, "%llu", current_process->rss);
     p = qstrcat(p, b);
     p = qstrcat(p, ",\"restarts_counter\":");
     sprintf(b, "%u", current_process->restarts_counter);

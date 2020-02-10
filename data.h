@@ -36,7 +36,7 @@ struct Process {
   struct Process *next;
 
   int action;
-  int rss;
+  unsigned long long rss;
 };
 
 struct Disk {
@@ -106,6 +106,6 @@ static inline void get_current_rx_tx_for_iface(unsigned long long *rx,
                                                unsigned long long *tx,
                                                const char *iface);
 
-static inline void get_rss_by_pid(int *rss, const pid_t pid);
+static inline void get_rss_by_pid(unsigned long long *rss, const pid_t pid);
 
 #endif // DATA_H
