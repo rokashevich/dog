@@ -128,10 +128,10 @@ void gen_json(struct Data *data) {
   struct Process *current_process = data->processes_head;
   while (current_process != NULL) {
     p = qstrcat(p, "{");
-    p = qstrcat(p, "\"id\":\"");
+    p = qstrcat(p, "\"id\":");
     sprintf(b, "%u", current_process->id);
     p = qstrcat(p, b);
-    p = qstrcat(p, "\",");
+    p = qstrcat(p, ",");
     p = qstrcat(p, "\"pwd\":\"");
     p = qstrcat(p, current_process->pwd);
     p = qstrcat(p, "\",");
