@@ -54,6 +54,7 @@ struct Data {
   char boot_id[37]; // /proc/sys/kernel/random/boot_id > 7ef3d79c-15e2-42fe-81b2-947c123fbf4b
   struct timespec time;
   long uptime;
+  float loadavg;
 
   struct Cpu {
     char sys_class_thermal_thermal_zoneCPU_temp[sizeof(

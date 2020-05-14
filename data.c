@@ -279,6 +279,14 @@ void update_data(struct Data *data) {
     fclose(meminfo);
   }
 
+  f = fopen("/proc/loadavg", "r");
+  if (fgets(buf, sizeof(buf), f)) {
+    sscanf(buf, "%f %*s", &data->loadavg);
+    fclose(f);
+  } else {
+    data->loadavg = -1.0f;
+  }
+
   struct Disk *current_disk = data->disks_head;
   while (current_disk != NULL) {
     struct statvfs stat;
@@ -361,11 +369,11 @@ void update_data(struct Data *data) {
                                 (const char *)data->net[i].iface);
 
     // Обновляем текущие показания скоростей скачивания/закачивания байт в
-    // секунду. tx_bytes и rx_bytes обнуляются после 4Гб, поэтому когда на такое
-    // натыкаемся, пропускаем цикл оставляя предыдущее значение.
+    // секунду. tx_bytes и rx_bytes обнуляются после 4Гб, поэтому когда на
+    // такое натыкаемся, пропускаем цикл оставляя предыдущее значение.
     //
-    // Так же обновляем максимально достигнутые за время мониторинга показатели
-    // скоростей tx/rx.
+    // Так же обновляем максимально достигнутые за время мониторинга
+    // показатели скоростей tx/rx.
     double delta_bytes;
     if (data->net[i].tx >= tx_prev) {
       delta_bytes = data->net[i].tx - tx_prev;

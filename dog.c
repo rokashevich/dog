@@ -38,6 +38,8 @@ void gen_json(struct Data *data) {
   p = qstrcat(p, "\"uptime\":");
   sprintf(b, "%ld,", data->uptime);
   p = qstrcat(p, b);
+  sprintf(b, "\"loadavg\":%.2f,", data->loadavg);
+  p = qstrcat(p, b);
   p = qstrcat(p, "\"cpu\":{");
   p = qstrcat(p, "\"usage\":");
   sprintf(b, "%u", data->cpu.usage);
@@ -627,13 +629,10 @@ static void ev_handler(struct mg_connection *nc, int ev, void *ev_data) {
 void *worker() {
   struct Data *data = get_data();
   while (1) {
-    printf("update data 1\n");
     pthread_mutex_lock(&lock);
-    printf("update data 2\n");
     update_data(data);
     gen_json(data);
     pthread_mutex_unlock(&lock);
-    printf("update data 3\n");
     sleep(SLEEP);
   }
 }
