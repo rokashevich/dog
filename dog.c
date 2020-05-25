@@ -250,6 +250,7 @@ void *process_worker(void *voidprocess) {
         }
       }
       waitpid(process->pid, NULL, 0);
+      close(filedes[0]);
 
       if (process->action == ACTION_KILL) {
         pthread_mutex_lock(&lock);
@@ -473,10 +474,8 @@ void handle_killall(struct mg_connection *nc) {
 }
 
 void handle_message(struct mg_connection *nc, struct http_message *hm) {
-  printf("handle message 1\n");
   struct Data *data = get_data();
   pthread_mutex_lock(&lock);
-  printf("handle message 2\n");
   char buf[1024];
   if (mg_get_http_var(&hm->body, "del", buf, sizeof(buf)) > 0) {
     struct Msg *prev_msg = NULL;
@@ -526,10 +525,10 @@ void handle_message(struct mg_connection *nc, struct http_message *hm) {
             "*\r\nTransfer-Encoding: chunked\r\n\r\n");
   mg_send_http_chunk(nc, "", 0);
   pthread_mutex_unlock(&lock);
-  printf("handle message 3\n");
 }
 
 void handle_out(struct mg_connection *nc, struct http_message *hm) {
+  fprintf(stderr, "handle out inside\n");
   mg_printf(nc, "%s",
             "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
             "*\r\nTransfer-Encoding: chunked\r\n\r\n");
