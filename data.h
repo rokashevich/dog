@@ -50,6 +50,8 @@ struct Data {
   struct Process *processes_head;
   struct Msg *msgs_head;
 
+  int debug;
+
   char hostname[64];
   char boot_id[37]; // /proc/sys/kernel/random/boot_id > 7ef3d79c-15e2-42fe-81b2-947c123fbf4b
   struct timespec time;

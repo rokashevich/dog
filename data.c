@@ -38,6 +38,8 @@ void prepare_data(struct Data *data) {
 
   clock_gettime(CLOCK_REALTIME, &data->time);
 
+  data->debug = 0;
+
   // Узнаём hostname.
   f = fopen("/proc/sys/kernel/hostname", "r");
   if (!f || !fgets(data->hostname, sizeof(data->hostname), f)) {

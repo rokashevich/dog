@@ -31,8 +31,10 @@ void gen_json(struct Data *data) {
   p = qstrcat(p, "{");
   p = qstrcat(p, "\"hostname\":\"");
   p = qstrcat(p, data->hostname);
-  p = qstrcat(p, "\",");
-  p = qstrcat(p, "\"boot_id\":\"");
+  p = qstrcat(p, "\",\"debug\":");
+  sprintf(b, "%d", data->debug);
+  p = qstrcat(p, b);
+  p = qstrcat(p, ",\"boot_id\":\"");
   p = qstrcat(p, data->boot_id);
   p = qstrcat(p, "\",");
   p = qstrcat(p, "\"uptime\":");
@@ -279,7 +281,7 @@ void *process_worker(void *voidprocess) {
         }
         pthread_mutex_unlock(&lock);
         break;
-      } else if (process->action == ACTION_PAUSE) {
+      } else if (process->action == ACTION_PAUSE || data->debug == 1) {
         process->pid = 0;
         process->restarts_counter = 0;
         break;
@@ -338,6 +340,7 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
   mg_get_http_var(&hm->body, "cmd", buf, sizeof(buf));
   new_process->cmd = malloc((strlen(buf) + 1) * sizeof(char));
   strcpy(new_process->cmd, buf);
+  printf("handle_watch: cmd=%s\n", buf);
 
   new_process->circular_buffer_pos = 0;
   memset(new_process->circular_buffer, '\0', BUFFER_OUT_SIZE);
@@ -528,7 +531,6 @@ void handle_message(struct mg_connection *nc, struct http_message *hm) {
 }
 
 void handle_out(struct mg_connection *nc, struct http_message *hm) {
-  fprintf(stderr, "handle out inside\n");
   mg_printf(nc, "%s",
             "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
             "*\r\nTransfer-Encoding: chunked\r\n\r\n");
@@ -537,6 +539,7 @@ void handle_out(struct mg_connection *nc, struct http_message *hm) {
   char buf[BUFFER_OUT_SIZE];
   unsigned long length = 0;
   if (mg_get_query_string_var(&hm->query_string, "id", buf, sizeof(buf)) > 0) {
+    printf("handle_out: id=%s\n", buf);
     unsigned int request_id = (unsigned int)atoi(buf);
     struct Process *current_process = data->processes_head;
     while (current_process != NULL) {
@@ -564,8 +567,9 @@ void handle_out(struct mg_connection *nc, struct http_message *hm) {
 
 void handle_df(struct mg_connection *nc, struct http_message *hm) {
   struct Data *data = get_data();
-  char buf[256];
+  char buf[BUFFER_SIZE_DEFAULT];
   if (mg_get_http_var(&hm->body, "path", buf, sizeof(buf)) > 0) {
+    printf("handle_df: path=%s\n", buf);
     struct Disk *new_disk;
     if (data->disks_head == NULL) {
       data->disks_head = malloc(sizeof(struct Disk));
@@ -585,6 +589,24 @@ void handle_df(struct mg_connection *nc, struct http_message *hm) {
     new_disk->total = 0;
     new_disk->used = 0;
   }
+  mg_printf(nc, "%s",
+            "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
+            "*\r\nTransfer-Encoding: chunked\r\n\r\n");
+  mg_send_http_chunk(nc, "", 0);
+}
+
+void handle_setup(struct mg_connection *nc, struct http_message *hm) {
+  char buf[BUFFER_SIZE_DEFAULT];
+  if (mg_get_query_string_var(&hm->query_string, "debug", buf, sizeof(buf)) >
+      0) {
+    printf("handle_setup: debug=%s\n", buf);
+    struct Data *data = get_data();
+    if (strcmp(buf, "1") == 0)
+      data->debug = 1;
+    else
+      data->debug = 0;
+  }
+
   mg_printf(nc, "%s",
             "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
             "*\r\nTransfer-Encoding: chunked\r\n\r\n");
@@ -617,6 +639,8 @@ static void ev_handler(struct mg_connection *nc, int ev, void *ev_data) {
         handle_df(nc, hm);
       else if (mg_vcmp(&hm->uri, "/undf") == 0)
         handle_undf(nc);
+      else if (mg_vcmp(&hm->uri, "/setup") == 0)
+        handle_setup(nc, hm);
       else
         mg_serve_http(nc, hm, s_http_server_opts);
       break;
