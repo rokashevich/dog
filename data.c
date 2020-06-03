@@ -40,6 +40,8 @@ void prepare_data(struct Data *data) {
 
   data->debug = 0;
 
+  sprintf(data->timestamp, "%s", "00000000000000");
+
   // Узнаём hostname.
   f = fopen("/proc/sys/kernel/hostname", "r");
   if (!f || !fgets(data->hostname, sizeof(data->hostname), f)) {
@@ -187,6 +189,8 @@ void update_data(struct Data *data) {
                data->time.tv_sec * 1000000000L - data->time.tv_nsec) /
       1000000000L;
   data->time = current_time;
+
+  update_timestamp(data->timestamp);
 
   //
   // Обновляем данные по температуре процессора.
@@ -403,6 +407,13 @@ void update_data(struct Data *data) {
     get_rss_by_pid(&current_process->rss, current_process->pid);
     current_process = current_process->next;
   }
+}
+
+void update_timestamp(char *timestamp) {
+  time_t rawtime;
+  time(&rawtime);
+  const struct tm *timeinfo = localtime(&rawtime);
+  strftime(timestamp, strlen(timestamp) + 1, "%Y%m%d%H%M%S", timeinfo);
 }
 
 static inline void get_current_rx_tx_for_iface(unsigned long long *rx,

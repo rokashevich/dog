@@ -34,6 +34,8 @@ void gen_json(struct Data *data) {
   p = qstrcat(p, "\",\"debug\":");
   sprintf(b, "%d", data->debug);
   p = qstrcat(p, b);
+  p = qstrcat(p, ",\"timestamp\":");
+  p = qstrcat(p, data->timestamp);
   p = qstrcat(p, ",\"boot_id\":\"");
   p = qstrcat(p, data->boot_id);
   p = qstrcat(p, "\",");

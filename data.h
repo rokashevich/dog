@@ -54,6 +54,7 @@ struct Data {
 
   char hostname[64];
   char boot_id[37]; // /proc/sys/kernel/random/boot_id > 7ef3d79c-15e2-42fe-81b2-947c123fbf4b
+  char timestamp[15];  // YYYYMMDDhhmmss\0
   struct timespec time;
   long uptime;
   float loadavg;
@@ -104,6 +105,8 @@ int get_hostname(struct Data *data);
 void prepare_data(struct Data *data); // Выполняется раз при запуске программы.
 
 void update_data(struct Data *data); // Выполняется с периодичностью.
+
+void update_timestamp(char *timestamp);
 
 static inline void get_current_rx_tx_for_iface(unsigned long long *rx,
                                                unsigned long long *tx,
