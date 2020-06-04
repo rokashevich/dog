@@ -216,22 +216,24 @@ void *process_worker(void *voidprocess) {
       close(filedes[1]);
       close(filedes[0]);
 
-      // Перед стартом процесса и перехвата его stdout и stderr пишем в stdout
-      // сосотояние окружения, в котором процесс запускается: переменные
-      // окружения, рабочий катталог, параметры запуска. Для того чтобы можно
-      // было удобнее отладиться вручную в консоли, в случае необходимости.
-      fprintf(stdout, "***\n");
-      fprintf(stdout, "%i\n", process->restarts_counter);
-      fprintf(stdout, "cd %s && ", process->pwd);
+      fprintf(stdout, "\n--- start %i at %c%c:%c%c in '%s'\n>>>",
+              process->restarts_counter, data->timestamp[10],
+              data->timestamp[11], data->timestamp[12], data->timestamp[13],
+              process->pwd);
       for (int i = 0; process->envs[i]; ++i) {
         fprintf(stdout, "%s ", process->envs[i]);
       }
-      fprintf(stdout, "%s\n", process->cmd);
-      fprintf(stdout, "***\n");
+      fprintf(stdout, "%s\n\n", process->cmd);
       execvpe(process->cmds[0], process->cmds, process->envs);
       fprintf(stderr, "failed to execute \"%s\"\n", process->cmds[0]);
     } else {
       close(filedes[1]);
+
+      if (data->debug == 1) {
+        process->circular_buffer_pos = 0;
+        memset(process->circular_buffer, '\0', BUFFER_OUT_SIZE);
+      }
+
       ssize_t nread;
       char buffer[1024];
       while ((nread = read(filedes[0], &buffer[0], sizeof(buffer))) > 0) {
