@@ -3,6 +3,8 @@
 
 #include <pthread.h>
 #include <unistd.h>
+
+#include "data.h"
 #include "mongoose.h"
 
 struct Msg {

@@ -3,6 +3,8 @@
 #define _GNU_SOURCE
 #endif
 
+#include "dog.h"
+
 #include <execinfo.h>
 #include <fcntl.h>
 #include <pthread.h>
@@ -14,13 +16,12 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include "mongoose.h"
-#include "mongoose_helper.h"
-
 #include "data.h"
 #include "defines.h"
-#include "dog.h"
 #include "helpers.h"
+#include "logger.h"
+#include "mongoose.h"
+#include "mongoose_helper.h"
 
 pthread_mutex_t lock;
 
@@ -668,12 +669,11 @@ volatile sig_atomic_t stop = 0;
 void interrupt_handler(int signum) { stop = 1; }
 
 int main() {
-  printf("dog version " SOURCES_VERSION "\n");
-
+  o("dog version " SOURCES_VERSION "\n");
   setlinebuf(stdout);
 
   if (pthread_mutex_init(&lock, NULL) != 0) {
-    printf("fail mutex init\n");
+    o("fail mutex init\n");
   }
 
   struct Data *data = get_data();
@@ -681,22 +681,23 @@ int main() {
   prepare_data(data);
 
   if (pthread_create(&(tid[0]), NULL, &worker, NULL) != 0) {
-    printf("fail thread worker\n");
+    o("fail thread worker\n");
   }
 
   struct mg_mgr mgr;
   struct mg_connection *nc;
 
-  printf("mongoose version " MG_VERSION "\n");
+  o("mongoose version " MG_VERSION "\n");
   mg_mgr_init(&mgr, NULL);
   nc = mg_bind(&mgr, s_http_port, ev_handler);
   if (!nc) {
-    printf("fail bind %s\n", s_http_port);
+    o("fail bind %s\n", s_http_port);
+    return 1;
   }
   mg_set_protocol_http_websocket(nc);
   s_http_server_opts.document_root = ".";
   s_http_server_opts.enable_directory_listing = "yes";
-  printf("start server at %s\n", s_http_port);
+  // o("start server at %s\n", s_http_port);
   signal(SIGINT, interrupt_handler);
   signal(SIGTERM, interrupt_handler);
   signal(SIGQUIT, interrupt_handler);
