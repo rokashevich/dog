@@ -4,14 +4,13 @@
 #include <time.h>
 
 void o(char* format, ...) {
-  time_t ltime;
-  ltime = time(NULL);
-  struct tm* tm;
-  tm = localtime(&ltime);
-  // Формат метки времени: "2020-10-14 09:28:59 "
-  const char timestamp_format[] = "%04d-%02d-%02d %02d:%02d:%02d ";
-  fprintf(stdout, timestamp_format, tm->tm_year + 1900, tm->tm_mon, tm->tm_mday,
-          tm->tm_hour, tm->tm_min, tm->tm_sec);
+  struct timespec ts;
+  clock_gettime(CLOCK_REALTIME, &ts);
+  struct tm* ptm = localtime(&ts.tv_sec);
+  int tenths_ms = ts.tv_nsec / 1000000L;
+  fprintf(stdout, "[%04d-%02d-%02d %02d:%02d:%02d.%d] ",
+        1900 + ptm->tm_year, ptm->tm_mon + 1, ptm->tm_mday,
+        ptm->tm_hour, ptm->tm_min, ptm->tm_sec, tenths_ms);
 
   va_list arg;
   va_start(arg, format);
