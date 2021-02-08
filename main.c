@@ -3,7 +3,7 @@
 #define _GNU_SOURCE
 #endif
 
-#include "dog.h"
+#include "main.h"
 
 #include <execinfo.h>
 #include <fcntl.h>
