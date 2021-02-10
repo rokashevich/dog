@@ -11,6 +11,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/prctl.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -26,14 +27,15 @@
 pthread_mutex_t lock;
 
 void gen_json(struct Data *data) {
-  char b[100];
+  const int s = 4096;  // оперативный буфер, большой не нужен
+  char b[s];
   char *p = data->json;
   data->json[0] = '\0';
   p = qstrcat(p, "{");
   p = qstrcat(p, "\"hostname\":\"");
   p = qstrcat(p, data->hostname);
   p = qstrcat(p, "\",\"debug\":");
-  sprintf(b, "%d", data->debug);
+  snprintf(b, s, "%d", data->debug);
   p = qstrcat(p, b);
   p = qstrcat(p, ",\"timestamp\":");
   p = qstrcat(p, data->timestamp);
@@ -41,23 +43,23 @@ void gen_json(struct Data *data) {
   p = qstrcat(p, data->boot_id);
   p = qstrcat(p, "\",");
   p = qstrcat(p, "\"uptime\":");
-  sprintf(b, "%ld,", data->uptime);
+  snprintf(b, s, "%ld,", data->uptime);
   p = qstrcat(p, b);
-  sprintf(b, "\"loadavg\":%.2f,", data->loadavg);
+  snprintf(b, s, "\"loadavg\":%.2f,", data->loadavg);
   p = qstrcat(p, b);
   p = qstrcat(p, "\"cpu\":{");
   p = qstrcat(p, "\"usage\":");
-  sprintf(b, "%u", data->cpu.usage);
+  snprintf(b, s, "%u", data->cpu.usage);
   p = qstrcat(p, b);
   strcat(data->json, ",");
   p = qstrcat(p, "\"temperature\":");
-  sprintf(b, "%u", data->cpu.temperature);
+  snprintf(b, s, "%u", data->cpu.temperature);
   p = qstrcat(p, b);
   strcat(data->json, ",");
   p = qstrcat(p, "\"cores\":[");
   for (int i = 0; i < data->cpu.count; ++i) {
     p = qstrcat(p, "{\"usage\":");
-    sprintf(b, "%u", data->cpu.cores_usage[i]);
+    snprintf(b, s, "%u", data->cpu.cores_usage[i]);
     p = qstrcat(p, b);
     p = qstrcat(p, "}");
     if (i < data->cpu.count - 1) p = qstrcat(p, ",");
@@ -66,11 +68,11 @@ void gen_json(struct Data *data) {
   p = qstrcat(p, "},");
   p = qstrcat(p, "\"ram\":{");
   p = qstrcat(p, "\"total\":");
-  sprintf(b, "%lld", data->ram.total);
+  snprintf(b, s, "%lld", data->ram.total);
   p = qstrcat(p, b);
   p = qstrcat(p, ",");
   p = qstrcat(p, "\"usage\":");
-  sprintf(b, "%u", data->ram.usage);
+  snprintf(b, s, "%u", data->ram.usage);
   p = qstrcat(p, b);
   p = qstrcat(p, "},");
   p = qstrcat(p, "\"disks\":[");
@@ -81,10 +83,10 @@ void gen_json(struct Data *data) {
     p = qstrcat(p, current_disk->path);
     p = qstrcat(p, "\",");
     p = qstrcat(p, "\"total\":");
-    sprintf(b, "%lld,", current_disk->total);
+    snprintf(b, s, "%lld,", current_disk->total);
     p = qstrcat(p, b);
     p = qstrcat(p, "\"used\":");
-    sprintf(b, "%lld", current_disk->used);
+    snprintf(b, s, "%lld", current_disk->used);
     p = qstrcat(p, b);
     p = qstrcat(p, "}");
     if (current_disk->next) p = qstrcat(p, ",");
@@ -104,28 +106,28 @@ void gen_json(struct Data *data) {
     p = qstrcat(p, data->net[i].hw);
     p = qstrcat(p, "\",");
     p = qstrcat(p, "\"carrier\":");
-    sprintf(b, "%u,", data->net[i].carrier);
+    snprintf(b, s, "%u,", data->net[i].carrier);
     p = qstrcat(p, b);
     p = qstrcat(p, "\"speed\":");
-    sprintf(b, "%u,", data->net[i].speed);
+    snprintf(b, s, "%u,", data->net[i].speed);
     p = qstrcat(p, b);
     p = qstrcat(p, "\"rx\":");
-    sprintf(b, "%lld,", data->net[i].rx);
+    snprintf(b, s, "%lld,", data->net[i].rx);
     p = qstrcat(p, b);
     p = qstrcat(p, "\"tx\":");
-    sprintf(b, "%lld,", data->net[i].tx);
+    snprintf(b, s, "%lld,", data->net[i].tx);
     p = qstrcat(p, b);
     p = qstrcat(p, "\"current_rx_speed\":");
-    sprintf(b, "%lld,", data->net[i].current_rx_speed);
+    snprintf(b, s, "%lld,", data->net[i].current_rx_speed);
     p = qstrcat(p, b);
     p = qstrcat(p, "\"current_tx_speed\":");
-    sprintf(b, "%lld,", data->net[i].current_tx_speed);
+    snprintf(b, s, "%lld,", data->net[i].current_tx_speed);
     p = qstrcat(p, b);
     p = qstrcat(p, "\"max_rx_speed\":");
-    sprintf(b, "%lld,", data->net[i].max_rx_speed);
+    snprintf(b, s, "%lld,", data->net[i].max_rx_speed);
     p = qstrcat(p, b);
     p = qstrcat(p, "\"max_tx_speed\":");
-    sprintf(b, "%lld", data->net[i].max_tx_speed);
+    snprintf(b, s, "%lld", data->net[i].max_tx_speed);
     p = qstrcat(p, b);
     p = qstrcat(p, "}");
     if (i < data->net_count - 1) p = qstrcat(p, ",");
@@ -136,7 +138,7 @@ void gen_json(struct Data *data) {
   while (current_process != NULL) {
     p = qstrcat(p, "{");
     p = qstrcat(p, "\"id\":");
-    sprintf(b, "%u", current_process->id);
+    snprintf(b, s, "%u", current_process->id);
     p = qstrcat(p, b);
     p = qstrcat(p, ",");
     p = qstrcat(p, "\"pwd\":\"");
@@ -149,13 +151,13 @@ void gen_json(struct Data *data) {
     p = qstrcat(p, current_process->cmd);
     p = qstrcat(p, "\",");
     p = qstrcat(p, "\"pid\":");
-    sprintf(b, "%u", current_process->pid);
+    snprintf(b, s, "%u", current_process->pid);
     p = qstrcat(p, b);
     p = qstrcat(p, ",\"rss\":");
-    sprintf(b, "%llu", current_process->rss);
+    snprintf(b, s, "%llu", current_process->rss);
     p = qstrcat(p, b);
     p = qstrcat(p, ",\"restarts_counter\":");
-    sprintf(b, "%u", current_process->restarts_counter);
+    snprintf(b, s, "%u", current_process->restarts_counter);
     p = qstrcat(p, b);
     p = qstrcat(p, "}");
     if (current_process->next) p = qstrcat(p, ",");
@@ -189,25 +191,30 @@ void handle_status(struct mg_connection *nc) {
 }
 
 void *process_worker(void *voidprocess) {
-  struct Process *process = (struct Process *)voidprocess;
-  struct Data *data = get_data();
+  struct Process *process = (struct Process *)voidprocess;  // ctrl+shitf+u,2502
+  o("watch pwd,env,cmd=│%s│%s│%s│", process->pwd, process->env, process->cmd);
 
+  struct Data *data = get_data();
   int filedes[2];
   if (pipe(filedes) == -1) {
-    perror("pipe");
-    exit(1);
+    w("process_worker: %s", strerror(errno));
+    return NULL;
   }
 
   process->pid = fork();
   while (1) {
     if (process->pid == -1) {
-      printf("fork error\n");
+      w("process_worker: %s", strerror(errno));
     } else if (process->pid == 0) {  // Внутри child-а.
       // Убиваем child, если parent завершился.
       prctl(PR_SET_PDEATHSIG, SIGKILL);
 
       if (strlen(process->pwd)) {
-        chdir(process->pwd);
+        if (chdir(process->pwd) == -1) {
+          w("chdir(%s)=%s", process->pwd, strerror(errno));
+          process->action = ACTION_KILL;
+          break;
+        }
       }
 
       while ((dup2(filedes[1], STDOUT_FILENO) == -1) && (errno == EINTR)) {
@@ -227,7 +234,7 @@ void *process_worker(void *voidprocess) {
       fprintf(stdout, "%s\n\n", process->cmd);
       execvpe(process->cmds[0], process->cmds, process->envs);
       fprintf(stderr, "failed to execute \"%s\"\n", process->cmds[0]);
-    } else {
+    } else {  // parent
       close(filedes[1]);
 
       if (data->debug == 1) {
@@ -291,6 +298,7 @@ void *process_worker(void *voidprocess) {
         process->restarts_counter = 0;
         break;
       } else {
+        w("died");
         sleep(1);
         process->restarts_counter++;
         if (pipe(filedes) == -1) {
@@ -334,18 +342,22 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
   // и заполняем соотвествующие поля в структуре Process.
 
   char buf[1024];
+  int siz;
+
   mg_get_http_var(&hm->body, "pwd", buf, sizeof(buf));
-  new_process->pwd = malloc((strlen(buf) + 1) * sizeof(char));
-  strcpy(new_process->pwd, buf);
+  siz = strlen(buf) + 1;
+  new_process->pwd = malloc(siz * sizeof(char));
+  strncpy(new_process->pwd, buf, siz);
 
   mg_get_http_var(&hm->body, "env", buf, sizeof(buf));
-  new_process->env = malloc((strlen(buf) + 1) * sizeof(char));
-  strcpy(new_process->env, buf);
+  siz = strlen(buf) + 1;
+  new_process->env = malloc(siz * sizeof(char));
+  strncpy(new_process->env, buf, siz);
 
   mg_get_http_var(&hm->body, "cmd", buf, sizeof(buf));
-  new_process->cmd = malloc((strlen(buf) + 1) * sizeof(char));
-  strcpy(new_process->cmd, buf);
-  printf("handle_watch: cmd=%s\n", buf);
+  siz = strlen(buf) + 1;
+  new_process->cmd = malloc(siz * sizeof(char));
+  strncpy(new_process->cmd, buf, siz);
 
   new_process->circular_buffer_pos = 0;
   memset(new_process->circular_buffer, '\0', BUFFER_OUT_SIZE);
@@ -361,7 +373,7 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
   // Запускаем поток отслеживания запущенного запрошенного процесса.
   pthread_t tid[2];
   if (pthread_create(&(tid[0]), NULL, &process_worker, new_process) != 0) {
-    printf("!!! Warning: pthread_create: process_worker\n");
+    e("pthread_create: process_worker");
   }
   mg_printf(nc, "%s",
             "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
@@ -669,7 +681,7 @@ volatile sig_atomic_t stop = 0;
 void interrupt_handler(int signum) { stop = 1; }
 
 int main() {
-  o("dog version " SOURCES_VERSION "\n");
+  o("version dog " SOURCES_VERSION);
   setlinebuf(stdout);
 
   if (pthread_mutex_init(&lock, NULL) != 0) {
@@ -687,7 +699,7 @@ int main() {
   struct mg_mgr mgr;
   struct mg_connection *nc;
 
-  o("mongoose version " MG_VERSION "\n");
+  o("version mongoose " MG_VERSION);
   mg_mgr_init(&mgr, NULL);
   nc = mg_bind(&mgr, s_http_port, ev_handler);
   if (!nc) {
