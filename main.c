@@ -34,9 +34,6 @@ void gen_json(struct Data *data) {
   p = qstrcat(p, "{");
   p = qstrcat(p, "\"hostname\":\"");
   p = qstrcat(p, data->hostname);
-  p = qstrcat(p, "\",\"debug\":");
-  snprintf(b, s, "%d", data->debug);
-  p = qstrcat(p, b);
   p = qstrcat(p, ",\"timestamp\":");
   p = qstrcat(p, data->timestamp);
   p = qstrcat(p, ",\"boot_id\":\"");
@@ -191,70 +188,55 @@ void handle_status(struct mg_connection *nc) {
 }
 
 void *process_worker(void *voidprocess) {
-  struct Process *process = (struct Process *)voidprocess;  // ctrl+shitf+u,2502
-  o("watch pwd,env,cmd=│%s│%s│%s│", process->pwd, process->env, process->cmd);
-
+  struct Process *process = (struct Process *)voidprocess;
   struct Data *data = get_data();
   int filedes[2];
   if (pipe(filedes) == -1) {
-    w("process_worker: %s", strerror(errno));
+    e("pipe():%s", strerror(errno));
     return NULL;
   }
-
   process->pid = fork();
   while (1) {
     if (process->pid == -1) {
-      w("process_worker: %s", strerror(errno));
+      e("fork():%s", strerror(errno));
     } else if (process->pid == 0) {  // Внутри child-а.
       // Убиваем child, если parent завершился.
       prctl(PR_SET_PDEATHSIG, SIGKILL);
 
+      while ((dup2(filedes[1], STDOUT_FILENO) == -1) && (errno == EINTR))
+        e("should it happen?");
+      while ((dup2(filedes[1], STDERR_FILENO) == -1) && (errno == EINTR))
+        e("should it happen?");
+      close(filedes[0]);
+      close(filedes[1]);
+
+      fprintf(stdout, "exec #%d cd '%s'&&%s %s\n", process->restarts_counter,
+              process->pwd, process->env, process->cmd);
+
       if (strlen(process->pwd)) {
-        if (chdir(process->pwd) == -1) {
-          w("chdir(%s)=%s", process->pwd, strerror(errno));
-          process->action = ACTION_KILL;
-          break;
+        if (chdir(process->pwd) != 0) {
+          fprintf(stdout, "chdir(%s):%s\n", process->pwd, strerror(errno));
+          return NULL;
         }
       }
 
-      while ((dup2(filedes[1], STDOUT_FILENO) == -1) && (errno == EINTR)) {
-      }
-      while ((dup2(filedes[1], STDERR_FILENO) == -1) && (errno == EINTR)) {
-      }
-      close(filedes[1]);
-      close(filedes[0]);
-
-      fprintf(stdout, "\n--- start %i at %c%c:%c%c in '%s'\n>>>",
-              process->restarts_counter, data->timestamp[10],
-              data->timestamp[11], data->timestamp[12], data->timestamp[13],
-              process->pwd);
-      for (int i = 0; process->envs[i]; ++i) {
-        fprintf(stdout, "%s ", process->envs[i]);
-      }
-      fprintf(stdout, "%s\n\n", process->cmd);
       execvpe(process->cmds[0], process->cmds, process->envs);
-      fprintf(stderr, "failed to execute \"%s\"\n", process->cmds[0]);
     } else {  // parent
+      o("exec #%d cd '%s'&&%s %s", process->restarts_counter, process->pwd,
+        process->env, process->cmd);
       close(filedes[1]);
-
-      if (data->debug == 1) {
-        process->circular_buffer_pos = 0;
-        memset(process->circular_buffer, '\0', BUFFER_OUT_SIZE);
-      }
 
       ssize_t nread;
       char buffer[1024];
       while ((nread = read(filedes[0], &buffer[0], sizeof(buffer))) > 0) {
         unsigned long buffer_right_side_size =
             sizeof(process->circular_buffer) - process->circular_buffer_pos;
-        // Полученный stdout/stderr влезает в правую часть буфера целиком.
         if (buffer_right_side_size >= (unsigned long)nread) {
+          // Полученный stdout/stderr влезает в правую часть буфера целиком.
           memcpy(process->circular_buffer + process->circular_buffer_pos,
                  buffer, (unsigned long)nread);
           process->circular_buffer_pos += (unsigned long)nread;
-        }
-        // Полученный stdout/stderr надо разбивать на две части.
-        else {
+        } else {  // Полученный stdout/stderr надо разбивать на две части.
           memcpy(process->circular_buffer + process->circular_buffer_pos,
                  buffer, buffer_right_side_size);
           process->circular_buffer_pos =
@@ -293,17 +275,16 @@ void *process_worker(void *voidprocess) {
         }
         pthread_mutex_unlock(&lock);
         break;
-      } else if (process->action == ACTION_PAUSE || data->debug == 1) {
+      } else if (process->action == ACTION_PAUSE) {
         process->pid = 0;
         process->restarts_counter = 0;
         break;
       } else {
-        w("died");
         sleep(1);
         process->restarts_counter++;
         if (pipe(filedes) == -1) {
-          perror("pipe");
-          exit(1);
+          e("pipe():%s", strerror(errno));
+          continue;
         }
         process->pid = fork();
       }
@@ -362,6 +343,10 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
   new_process->circular_buffer_pos = 0;
   memset(new_process->circular_buffer, '\0', BUFFER_OUT_SIZE);
 
+  // ctrl+shitf+u,2502
+  o("request watch pwd,env,cmd=│%s│%s│%s│", new_process->pwd, new_process->env,
+    new_process->cmd);
+
   new_process->envs = string_to_string_array(new_process->env);
   new_process->cmds = string_to_string_array(new_process->cmd);
 
@@ -372,9 +357,9 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
 
   // Запускаем поток отслеживания запущенного запрошенного процесса.
   pthread_t tid[2];
-  if (pthread_create(&(tid[0]), NULL, &process_worker, new_process) != 0) {
-    e("pthread_create: process_worker");
-  }
+  if (pthread_create(&(tid[0]), NULL, &process_worker, new_process) != 0)
+    e("pthread_create:%s", errno);
+
   mg_printf(nc, "%s",
             "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
             "*\r\nTransfer-Encoding: chunked\r\n\r\n");
@@ -556,11 +541,11 @@ void handle_out(struct mg_connection *nc, struct http_message *hm) {
   char buf[BUFFER_OUT_SIZE];
   unsigned long length = 0;
   if (mg_get_query_string_var(&hm->query_string, "id", buf, sizeof(buf)) > 0) {
-    printf("handle_out: id=%s\n", buf);
     unsigned int request_id = (unsigned int)atoi(buf);
     struct Process *current_process = data->processes_head;
     while (current_process != NULL) {
       if (current_process->id == request_id) {
+        o("request out for cmd=%s", current_process->cmd);
         for (unsigned long i = current_process->circular_buffer_pos;
              i < BUFFER_OUT_SIZE; ++i, ++length) {
           char c = current_process->circular_buffer[i];
@@ -616,12 +601,6 @@ void handle_setup(struct mg_connection *nc, struct http_message *hm) {
   char buf[BUFFER_SIZE_DEFAULT];
   if (mg_get_query_string_var(&hm->query_string, "debug", buf, sizeof(buf)) >
       0) {
-    printf("handle_setup: debug=%s\n", buf);
-    struct Data *data = get_data();
-    if (strcmp(buf, "1") == 0)
-      data->debug = 1;
-    else
-      data->debug = 0;
   }
 
   mg_printf(nc, "%s",

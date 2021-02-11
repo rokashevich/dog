@@ -51,8 +51,6 @@ struct Data {
   struct Process *processes_head;
   struct Msg *msgs_head;
 
-  int debug;
-
   char version[32];
   char hostname[64];
   char boot_id[37];    // /proc/sys/kernel/random/boot_id >

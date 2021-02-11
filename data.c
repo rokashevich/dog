@@ -1,15 +1,10 @@
+#include "data.h"
+
 #include <arpa/inet.h>
 #include <dirent.h>
-#include <net/if.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/sysinfo.h>
-#include <unistd.h>
-
 #include <linux/ethtool.h>
-#include <linux/if.h>
 #include <linux/sockios.h>
+#include <net/if.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,8 +12,9 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/statvfs.h>
+#include <sys/sysinfo.h>
+#include <unistd.h>
 
-#include "data.h"
 #include "defines.h"
 
 const char *thermal_zone_type[] = {"x86_pkg_temp",      // x64
@@ -37,8 +33,6 @@ void prepare_data(struct Data *data) {
   FILE *f;
 
   clock_gettime(CLOCK_REALTIME, &data->time);
-
-  data->debug = 0;
 
   sprintf(data->timestamp, "%s", "00000000000000");
 
