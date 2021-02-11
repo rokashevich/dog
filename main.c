@@ -204,9 +204,9 @@ void *process_worker(void *voidprocess) {
       prctl(PR_SET_PDEATHSIG, SIGKILL);
 
       while ((dup2(filedes[1], STDOUT_FILENO) == -1) && (errno == EINTR))
-        e("should it happen?");
+        ;
       while ((dup2(filedes[1], STDERR_FILENO) == -1) && (errno == EINTR))
-        e("should it happen?");
+        ;
       close(filedes[0]);
       close(filedes[1]);
 
