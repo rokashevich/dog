@@ -202,7 +202,6 @@ void *process_worker(void *voidprocess) {
     } else if (process->pid == 0) {  // Внутри child-а.
       // Убиваем child, если parent завершился.
       prctl(PR_SET_PDEATHSIG, SIGKILL);
-
       while ((dup2(filedes[1], STDOUT_FILENO) == -1) && (errno == EINTR))
         ;
       while ((dup2(filedes[1], STDERR_FILENO) == -1) && (errno == EINTR))
@@ -219,8 +218,9 @@ void *process_worker(void *voidprocess) {
           return NULL;
         }
       }
-
       execvpe(process->cmds[0], process->cmds, process->envs);
+      fprintf(stdout, "execvpe():%s", strerror(errno));
+      exit(1);
     } else {  // parent
       o("exec #%d cd '%s'&&%s %s", process->restarts_counter, process->pwd,
         process->env, process->cmd);
@@ -245,7 +245,24 @@ void *process_worker(void *voidprocess) {
                  process->circular_buffer_pos);
         }
       }
-      waitpid(process->pid, NULL, 0);
+      int status;
+
+      while (waitpid(process->pid, &status, 0) == -1) {
+        if (errno != EINTR) {
+          fprintf(stdout, "waitpid():%s", strerror(errno));
+        }
+      }
+      if (WIFEXITED(status)) {
+        fprintf(stdout, "Child exited with status %d\n", WEXITSTATUS(status));
+      } else if (WIFSTOPPED(status)) {
+        fprintf(stdout, "Child stopped by signal %d (%s)\n", WSTOPSIG(status),
+                strsignal(WSTOPSIG(status)));
+      } else if (WIFSIGNALED(status)) {
+        fprintf(stdout, "Child killed by signal %d (%s)\n", WTERMSIG(status),
+                strsignal(WTERMSIG(status)));
+      } else {
+        fprintf(stdout, "Unknown child status\n");
+      }
       close(filedes[0]);
 
       if (process->action == ACTION_KILL) {

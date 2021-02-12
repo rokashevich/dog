@@ -25,4 +25,5 @@ int match(const char* pattern, const char* candidate, int p, int c);
 // Удаляет начальные и конечные пробелы, конечный символ перехода
 // на новую строку.
 char* strip(char* s);
+
 #endif  // HELPERS_H
