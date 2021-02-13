@@ -222,16 +222,24 @@ void *process_worker(void *voidprocess) {
       fprintf(stdout, "execvpe():%s", strerror(errno));
       exit(1);
     } else {  // parent
+      close(filedes[1]);
       o("exec #%d cd '%s'&&%s %s", process->restarts_counter, process->pwd,
         process->env, process->cmd);
-      close(filedes[1]);
 
       ssize_t nread;
       char buffer[1024];
+      const int cir_buf_siz =
+          sizeof(process->circular_buffer) / sizeof(*process->circular_buffer);
       while ((nread = read(filedes[0], &buffer[0], sizeof(buffer))) > 0) {
         unsigned long buffer_right_side_size =
-            sizeof(process->circular_buffer) - process->circular_buffer_pos;
-        if (buffer_right_side_size >= (unsigned long)nread) {
+            sizeof(process->circular_buffer) /
+                sizeof(*process->circular_buffer) -
+            process->circular_buffer_pos;
+        if (nread > cir_buf_siz) {
+          memcpy(process->circular_buffer, buffer + (nread - cir_buf_siz),
+                 (unsigned long)cir_buf_siz);
+          process->circular_buffer_pos = 0;
+        } else if (buffer_right_side_size >= (unsigned long)nread) {
           // Полученный stdout/stderr влезает в правую часть буфера целиком.
           memcpy(process->circular_buffer + process->circular_buffer_pos,
                  buffer, (unsigned long)nread);
@@ -358,10 +366,12 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
   strncpy(new_process->cmd, buf, siz);
 
   new_process->circular_buffer_pos = 0;
-  memset(new_process->circular_buffer, '\0', BUFFER_OUT_SIZE);
+  memset(new_process->circular_buffer, '\0',
+         sizeof(new_process->circular_buffer) /
+             sizeof(*new_process->circular_buffer));
 
   // ctrl+shitf+u,2502
-  o("request watch pwd,env,cmd=│%s│%s│%s│", new_process->pwd, new_process->env,
+  o("watch pwd,env,cmd=│%s│%s│%s│", new_process->pwd, new_process->env,
     new_process->cmd);
 
   new_process->envs = string_to_string_array(new_process->env);
@@ -555,16 +565,20 @@ void handle_out(struct mg_connection *nc, struct http_message *hm) {
             "*\r\nTransfer-Encoding: chunked\r\n\r\n");
 
   struct Data *data = get_data();
-  char buf[BUFFER_OUT_SIZE];
+  char buf_id[2];
   unsigned long length = 0;
-  if (mg_get_query_string_var(&hm->query_string, "id", buf, sizeof(buf)) > 0) {
-    unsigned int request_id = (unsigned int)atoi(buf);
+  if (mg_get_query_string_var(&hm->query_string, "id", buf_id, sizeof(buf_id)) >
+      0) {
+    unsigned int request_id = (unsigned int)atoi(buf_id);
     struct Process *current_process = data->processes_head;
+    const int siz = sizeof(current_process->circular_buffer) /
+                    sizeof(*current_process->circular_buffer);
+    char buf[siz];
     while (current_process != NULL) {
       if (current_process->id == request_id) {
         o("request out for cmd=%s", current_process->cmd);
-        for (unsigned long i = current_process->circular_buffer_pos;
-             i < BUFFER_OUT_SIZE; ++i, ++length) {
+        for (unsigned long i = current_process->circular_buffer_pos; i < siz;
+             ++i, ++length) {
           char c = current_process->circular_buffer[i];
           if (c == '\0') break;
           buf[length] = c;
@@ -575,12 +589,12 @@ void handle_out(struct mg_connection *nc, struct http_message *hm) {
           buf[length] = c;
         }
         buf[length] = '\0';
+        mg_printf_http_chunk(nc, buf);
         break;
       }
       current_process = current_process->next;
     }
   }
-  mg_printf_http_chunk(nc, buf);
   mg_send_http_chunk(nc, "", 0);
 }
 
