@@ -24,8 +24,9 @@ struct Process {
   char *env;        // DISPLAY=$DISPLAY LD_LIBRARY_PATH=.:../lib
   char *cmd;        // program --arg-one 1 --arg-two 2
 
-  char circular_buffer[512];  // Мегабайт для stdout + stderr.
+  char circular_buffer[1024];  // Для stdout + stderr.
   unsigned long circular_buffer_pos;
+  char previous_exit_log[6][200];  // Для последних строк перед падением.
 
   // Для хранения двухмерного массива параметров запуска в том виде,
   // в котором они используются для вызова execvpe().
@@ -103,7 +104,7 @@ struct Data *get_data(void);
 
 int get_hostname(struct Data *data);
 
-void prepare_data(struct Data *data);  // Выполняется раз при запуске программы.
+void prepare_data(struct Data *data);  // Выполняется раз при запуске.
 
 void update_data(struct Data *data);  // Выполняется с периодичностью.
 

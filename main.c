@@ -17,6 +17,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "cirbuf.h"
 #include "data.h"
 #include "defines.h"
 #include "helpers.h"
@@ -257,19 +258,19 @@ void *process_worker(void *voidprocess) {
 
       while (waitpid(process->pid, &status, 0) == -1) {
         if (errno != EINTR) {
-          fprintf(stdout, "waitpid():%s", strerror(errno));
+          w("waitpid():%s", strerror(errno));
         }
       }
       if (WIFEXITED(status)) {
-        fprintf(stdout, "Child exited with status %d\n", WEXITSTATUS(status));
+        o("Child exited with status %d", WEXITSTATUS(status));
       } else if (WIFSTOPPED(status)) {
-        fprintf(stdout, "Child stopped by signal %d (%s)\n", WSTOPSIG(status),
-                strsignal(WSTOPSIG(status)));
+        w("Child stopped by signal %d (%s)", WSTOPSIG(status),
+          strsignal(WSTOPSIG(status)));
       } else if (WIFSIGNALED(status)) {
-        fprintf(stdout, "Child killed by signal %d (%s)\n", WTERMSIG(status),
-                strsignal(WTERMSIG(status)));
+        w("Child killed by signal %d (%s)", WTERMSIG(status),
+          strsignal(WTERMSIG(status)));
       } else {
-        fprintf(stdout, "Unknown child status\n");
+        e("Unknown child status");
       }
       close(filedes[0]);
 
@@ -304,8 +305,22 @@ void *process_worker(void *voidprocess) {
         process->pid = 0;
         process->restarts_counter = 0;
         break;
-      } else {
-        sleep(1);
+      } else {  // Процесс завершился не по нашему запросу, а погиб.
+        // Сохраняем из буффера перехваченных stdout/stderr последние n строк в
+        // буффер хранения окончания вывода погибшего процесса.
+        const int src_siz = sizeof(process->circular_buffer) /
+                            sizeof(*process->circular_buffer);
+        const int lines = sizeof(process->previous_exit_log) /
+                          sizeof(**process->previous_exit_log) /
+                          sizeof(*process->previous_exit_log);
+        const int width = sizeof(*process->previous_exit_log);
+        cirbuf_copy_lines(process->circular_buffer, src_siz,
+                          process->circular_buffer_pos,
+                          process->previous_exit_log, lines, width);
+        //        for (int i = 0; i < lines; ++i) {
+        //          fprintf(stderr, "!%s\n", process->previous_exit_log[i]);
+        //        }
+        sleep(10);
         process->restarts_counter++;
         if (pipe(filedes) == -1) {
           e("pipe():%s", strerror(errno));
@@ -369,6 +384,11 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
   memset(new_process->circular_buffer, '\0',
          sizeof(new_process->circular_buffer) /
              sizeof(*new_process->circular_buffer));
+
+  // Инициаллизация нулями буфера для хранения лога завершившегося процесса.
+  memset(new_process->previous_exit_log, '\0',
+         sizeof(new_process->previous_exit_log) /
+             sizeof(**new_process->previous_exit_log));
 
   // ctrl+shitf+u,2502
   o("watch pwd,env,cmd=│%s│%s│%s│", new_process->pwd, new_process->env,
