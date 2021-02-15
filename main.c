@@ -598,13 +598,11 @@ void handle_out(struct mg_connection *nc, struct http_message *hm) {
     while (current_process != NULL) {
       if (current_process->id == request_id) {
         const char *sep1 =
-            "---previous exit "
-            "log-----------------------------------------------------------"
-            "-\n";
+            "---previous exit log--------------------"
+            "----------------------------------------\n";
         const char *sep2 =
-            "---current "
-            "state---------------------------------------------------------"
-            "-------\n";
+            "---current state------------------------"
+            "----------------------------------------\n";
         const unsigned long siz =
             strlen(sep1) + strlen(sep2) +
             sizeof(current_process->previous_exit_log) /
@@ -618,7 +616,6 @@ void handle_out(struct mg_connection *nc, struct http_message *hm) {
             512;
         char buf[siz];
         memset(buf, 0, sizeof(buf) / sizeof(*buf));
-
         sprintf(buf, "cd '%s'&&%s %s\n", current_process->pwd,
                 current_process->env, current_process->cmd);
         if (strlen(current_process->previous_exit_reason)) {
