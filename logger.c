@@ -1,7 +1,11 @@
+#include <errno.h>
 #include <linux/limits.h>
+#include <pthread.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
 #include <time.h>
 
 // https://www.gnu.org/software/libc/manual/html_node/Backtraces.html
@@ -19,6 +23,24 @@
 
 //  free(strings);
 //}
+
+char logfile[256] = "\0";
+FILE* fp;
+pthread_mutex_t lock;
+
+void logger_init() {
+  if (pthread_mutex_init(&lock, NULL) != 0) {
+    fprintf(stderr, "pthread_mutex_init():%s\n", strerror(errno));
+  }
+}
+
+void logger_setup(const char* path) {
+  pthread_mutex_lock(&lock);
+  if (fp) fclose(fp);
+  strncpy(logfile, path, strlen(path));
+  fp = fopen(logfile, "a");
+  pthread_mutex_unlock(&lock);
+}
 
 void printer(const char* suffix, char* format, va_list arg) {
   struct timespec ts;

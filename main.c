@@ -688,8 +688,9 @@ void handle_df(struct mg_connection *nc, struct http_message *hm) {
 
 void handle_setup(struct mg_connection *nc, struct http_message *hm) {
   char buf[BUFFER_SIZE_DEFAULT];
-  if (mg_get_query_string_var(&hm->query_string, "debug", buf, sizeof(buf)) >
+  if (mg_get_query_string_var(&hm->query_string, "logfile", buf, sizeof(buf)) >
       0) {
+    logger_setup(buf);
   }
 
   mg_printf(nc, "%s",
@@ -749,6 +750,8 @@ volatile sig_atomic_t stop = 0;
 void interrupt_handler(int signum) { stop = 1; }
 
 int main() {
+  logger_init();
+
   o("version dog " SOURCES_VERSION);
   setlinebuf(stdout);
 

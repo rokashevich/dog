@@ -1,7 +1,8 @@
 #ifndef LOGGER_H
 #define LOGGER_H
 
-void logger_setup(const char *logfile);
+void logger_init();
+void logger_setup(const char *path);
 
 // Функция записывает в лог то, что ей передали, o === output.
 void o(char *, ...);
