@@ -210,9 +210,6 @@ void *process_worker(void *voidprocess) {
       close(filedes[0]);
       close(filedes[1]);
 
-      fprintf(stdout, "exec #%d cd '%s'&&%s %s\n", process->restarts_counter,
-              process->pwd, process->env, process->cmd);
-
       if (strlen(process->pwd)) {
         if (chdir(process->pwd) != 0) {
           fprintf(stdout, "chdir(%s):%s\n", process->pwd, strerror(errno));
@@ -220,7 +217,7 @@ void *process_worker(void *voidprocess) {
         }
       }
       execvpe(process->cmds[0], process->cmds, process->envs);
-      fprintf(stdout, "execvpe():%s", strerror(errno));
+      fprintf(stdout, "execvpe():%s\n", strerror(errno));
       exit(1);
     } else {  // parent
       close(filedes[1]);
@@ -255,22 +252,26 @@ void *process_worker(void *voidprocess) {
         }
       }
       int status;
-
       while (waitpid(process->pid, &status, 0) == -1) {
         if (errno != EINTR) {
           w("waitpid():%s", strerror(errno));
         }
       }
+      char *buf = process->previous_exit_reason;
+      int siz = sizeof(process->previous_exit_reason) /
+                sizeof(*process->previous_exit_reason);
       if (WIFEXITED(status)) {
-        o("Child exited with status %d", WEXITSTATUS(status));
+        snprintf(buf, siz, "Exit code %d\n", WEXITSTATUS(status));
       } else if (WIFSTOPPED(status)) {
-        w("Child stopped by signal %d (%s)", WSTOPSIG(status),
-          strsignal(WSTOPSIG(status)));
+        snprintf(buf, siz, "Child stopped by signal %d (%s)", WSTOPSIG(status),
+                 strsignal(WSTOPSIG(status)));
       } else if (WIFSIGNALED(status)) {
-        w("Child killed by signal %d (%s)", WTERMSIG(status),
-          strsignal(WTERMSIG(status)));
+        snprintf(buf, siz, "Child killed by signal %d (%s)", WTERMSIG(status),
+                 strsignal(WTERMSIG(status)));
       } else {
-        e("Unknown child status");
+        const char *msg = "Exit reason unknown!";
+        w("%s", msg);
+        snprintf(buf, siz, "%s\n", msg);
       }
       close(filedes[0]);
 
@@ -317,10 +318,9 @@ void *process_worker(void *voidprocess) {
         cirbuf_copy_lines(process->circular_buffer, src_siz,
                           process->circular_buffer_pos,
                           process->previous_exit_log, lines, width);
-        //        for (int i = 0; i < lines; ++i) {
-        //          fprintf(stderr, "!%s\n", process->previous_exit_log[i]);
-        //        }
-        sleep(10);
+        cirbuf_clear(process->circular_buffer, src_siz,
+                     &process->circular_buffer_pos);
+        sleep(3);
         process->restarts_counter++;
         if (pipe(filedes) == -1) {
           e("pipe():%s", strerror(errno));
@@ -385,10 +385,13 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
          sizeof(new_process->circular_buffer) /
              sizeof(*new_process->circular_buffer));
 
-  // Инициаллизация нулями буфера для хранения лога завершившегося процесса.
+  // Инициаллизация нулями буферов-хранилищ информации о падении процесса.
   memset(new_process->previous_exit_log, '\0',
          sizeof(new_process->previous_exit_log) /
              sizeof(**new_process->previous_exit_log));
+  memset(new_process->previous_exit_reason, '\0',
+         sizeof(new_process->previous_exit_reason) /
+             sizeof(*new_process->previous_exit_reason));
 
   // ctrl+shitf+u,2502
   o("watch pwd,env,cmd=│%s│%s│%s│", new_process->pwd, new_process->env,
@@ -580,23 +583,61 @@ void handle_message(struct mg_connection *nc, struct http_message *hm) {
 }
 
 void handle_out(struct mg_connection *nc, struct http_message *hm) {
+  o("http_request out %s", hm->body.p);
   mg_printf(nc, "%s",
-            "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
-            "*\r\nTransfer-Encoding: chunked\r\n\r\n");
+            "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\n"
+            "Content-Type: text/plain; charset=UTF-8\r\n"
+            "Transfer-Encoding: chunked\r\n\r\n");
 
   struct Data *data = get_data();
   char buf_id[2];
-  unsigned long length = 0;
   if (mg_get_query_string_var(&hm->query_string, "id", buf_id, sizeof(buf_id)) >
       0) {
     unsigned int request_id = (unsigned int)atoi(buf_id);
     struct Process *current_process = data->processes_head;
-    const int siz = sizeof(current_process->circular_buffer) /
-                    sizeof(*current_process->circular_buffer);
-    char buf[siz];
     while (current_process != NULL) {
       if (current_process->id == request_id) {
-        o("request out for cmd=%s", current_process->cmd);
+        const char *sep1 =
+            "---previous exit "
+            "log-----------------------------------------------------------"
+            "-\n";
+        const char *sep2 =
+            "---current "
+            "state---------------------------------------------------------"
+            "-------\n";
+        const unsigned long siz =
+            strlen(sep1) + strlen(sep2) +
+            sizeof(current_process->previous_exit_log) /
+                sizeof(**current_process->previous_exit_log) +
+            sizeof(current_process->previous_exit_reason) /
+                sizeof(*current_process->previous_exit_reason) +
+            strlen(current_process->pwd) + strlen(current_process->env) +
+            strlen(current_process->cmd) +
+            sizeof(current_process->circular_buffer) /
+                sizeof(*current_process->circular_buffer) +
+            512;
+        char buf[siz];
+        memset(buf, 0, sizeof(buf) / sizeof(*buf));
+
+        sprintf(buf, "cd '%s'&&%s %s\n", current_process->pwd,
+                current_process->env, current_process->cmd);
+        if (strlen(current_process->previous_exit_reason)) {
+          strcat(buf, sep1);
+          const int lines = sizeof(current_process->previous_exit_log) /
+                            sizeof(**current_process->previous_exit_log) /
+                            sizeof(*current_process->previous_exit_log);
+          for (int i = 0; i < lines; ++i) {
+            const char *line = current_process->previous_exit_log[i];
+            if (strlen(line)) {
+              strcat(buf, line);
+              strcat(buf, "\n");
+            }
+          }
+          strcat(buf, current_process->previous_exit_reason);
+          strcat(buf, "\n");
+        }
+        strcat(buf, sep2);
+        unsigned long length = strlen(buf);
         for (unsigned long i = current_process->circular_buffer_pos; i < siz;
              ++i, ++length) {
           char c = current_process->circular_buffer[i];

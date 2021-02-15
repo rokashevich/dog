@@ -26,7 +26,8 @@ struct Process {
 
   char circular_buffer[1024];  // Для stdout + stderr.
   unsigned long circular_buffer_pos;
-  char previous_exit_log[6][200];  // Для последних строк перед падением.
+  char previous_exit_reason[256];
+  char previous_exit_log[5][128];  // Для последних строк перед падением.
 
   // Для хранения двухмерного массива параметров запуска в том виде,
   // в котором они используются для вызова execvpe().

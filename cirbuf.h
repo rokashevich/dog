@@ -4,21 +4,25 @@
 #include <stdio.h>
 #include <string.h>
 
-void cirbuf_get_nth_line(int n, int* begin, int* end) {}
+void cirbuf_clear(char* src_buf, int src_siz, unsigned long* src_pos) {
+  memset(src_buf, 0, sizeof(src_buf) / sizeof(*src_buf));
+  *src_pos = 0;
+}
 
-void cirbuf_copy_lines(char* src_buf, int src_siz, int src_pos, void* dst_buf,
-                       int lines, int width) {
-  fprintf(stderr, "--------------------------------------------------\n");
-  fprintf(stderr, "%c\n", src_buf[src_pos]);
-  fprintf(stderr, "--------------------------------------------------\n");
-  for (int i = 0; i < src_siz; ++i) {
-    fprintf(stderr, "%c", src_buf[i]);
-  }
-  fprintf(stderr, "--------------------------------------------------\n");
+void cirbuf_copy_lines(char* src_buf, int src_siz, unsigned long src_pos,
+                       void* dst_buf, int lines, int width) {
+  // Отладочный вывод содержимого циклического буфера:
+  //  fprintf(stderr, "- CIRBUF BEGIN (pos: %c) --------------------------\n",
+  //          src_buf[src_pos]);
+  //  for (int i = 0; i < src_siz; ++i) {
+  //    fprintf(stderr, "%c", src_buf[i]);
+  //  }
+  //  fprintf(stderr, "- CIRBUF END --------------------------------------\n");
+
   char(*dst)[width] = dst_buf;
 
-  int begin = src_pos;
-  int end;
+  unsigned long begin = src_pos;
+  unsigned long end;
   for (int line = lines - 1; line >= 0; --line) {
     end = begin > 0 ? begin - 1 : src_siz - 1;
     begin = end > 0 ? end - 1 : src_siz - 1;
@@ -33,10 +37,13 @@ void cirbuf_copy_lines(char* src_buf, int src_siz, int src_pos, void* dst_buf,
       strncpy(dst[line] + src_siz - begin, src_buf, end);
     }
   }
-  fprintf(stderr, "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
-  for (int i = 0; i < lines; ++i) {
-    fprintf(stderr, "%d: !%s?\n", i, dst[i]);
-  }
+
+  // Отладочный вывод получившегося:
+  //  fprintf(stderr, "- LINES BEGIN ------------------------------------\n");
+  //  for (int i = 0; i < lines; ++i) {
+  //    fprintf(stderr, "%d: !%s?\n", i, dst[i]);
+  //  }
+  //  fprintf(stderr, "- LINES END --------------------------------------\n");
 }
 
 #endif  // CIRBUF_H
