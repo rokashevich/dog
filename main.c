@@ -636,7 +636,7 @@ void handle_reset(struct mg_connection *nc, struct http_message *hm) {
   // Очистка всех df.
   while (data->disks_head != NULL) {
     struct Disk *delete_disk = data->disks_head;
-    o("stop monitoring %s", delete_disk->path);
+    o("reset df %s", delete_disk->path);
     data->disks_head = data->disks_head->next;
     free(delete_disk->path);
     free(delete_disk);
@@ -646,7 +646,7 @@ void handle_reset(struct mg_connection *nc, struct http_message *hm) {
   struct Process *prev_process = NULL;
   struct Process *free_process = NULL;
   while (current_process != NULL) {
-    o("stop watching '%s'", current_process->cmd);
+    o("reset watch '%s'", current_process->cmd);
     if (current_process->pid > 0) {
       current_process->action = ACTION_KILL;
       kill(current_process->pid, SIGKILL);
@@ -667,6 +667,26 @@ void handle_reset(struct mg_connection *nc, struct http_message *hm) {
       free(free_process);
     }
   }
+  // Очищаем сообщения.
+  struct Msg *prev_msg = NULL;
+  struct Msg *current_msg = data->msgs_head;
+  while (current_msg != NULL) {
+    o("reset message '%s'", current_msg->msg);
+    if (data->msgs_head == current_msg) {
+      data->msgs_head = current_msg->next;
+      current_msg->next = NULL;
+      free(current_msg->msg);
+      free(current_msg);
+      current_msg = data->msgs_head;
+    } else if (prev_msg != NULL) {
+      prev_msg->next = current_msg->next;
+      current_msg->next = NULL;
+      free(current_msg->msg);
+      free(current_msg);
+      current_msg = prev_msg->next;
+    }
+  }
+
   pthread_mutex_unlock(&lock);
   mg_printf(nc, "%s",
             "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
