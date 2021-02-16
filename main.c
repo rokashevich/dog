@@ -462,72 +462,6 @@ void handle_resume(struct mg_connection *nc, struct http_message *hm) {
   mg_send_http_chunk(nc, "", 0);
 }
 
-void handle_undf(struct mg_connection *nc) {
-  pthread_mutex_lock(&lock);
-  //  struct Process *current_process = processes_head;
-  //  while (current_process != NULL) {
-  //    current_process->action = ACTION_KILL;
-  //    if (current_process->pid > 0) {
-  //      kill(current_process->pid, SIGKILL);
-  //    }
-  //    current_process = current_process->next;
-  //  }
-  //  struct Msg *current_msg = msgs_head;
-  //  while (current_msg != NULL) {
-  //    current_msg->action = ACTION_FREE;
-  //    current_msg = current_msg->next;
-  //  }
-
-  struct Data *data = get_data();
-  while (data->disks_head != NULL) {
-    struct Disk *delete_disk = data->disks_head;
-    data->disks_head = data->disks_head->next;
-    free(delete_disk->path);
-    free(delete_disk);
-  }
-
-  mg_printf(nc, "%s",
-            "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
-            "*\r\nTransfer-Encoding: chunked\r\n\r\n");
-  mg_send_http_chunk(nc, "", 0);
-  pthread_mutex_unlock(&lock);
-}
-
-void handle_killall(struct mg_connection *nc) {
-  struct Data *data = get_data();
-  pthread_mutex_lock(&lock);
-  struct Process *current_process = data->processes_head;
-  struct Process *prev_process = NULL;
-  struct Process *free_process = NULL;
-  while (current_process != NULL) {
-    if (current_process->pid > 0) {
-      current_process->action = ACTION_KILL;
-      kill(current_process->pid, SIGKILL);
-      current_process = current_process->next;
-    } else {  // процесс на пузе
-      free_process = current_process;
-      if (prev_process == NULL) {
-        current_process = data->processes_head = current_process->next;
-      } else {
-        prev_process->next = current_process->next;
-        current_process = prev_process->next;
-      }
-      free(free_process->pwd);
-      free(free_process->env);
-      free(free_process->cmd);
-      free_string_array(free_process->envs);
-      free_string_array(free_process->cmds);
-      free(free_process);
-    }
-  }
-
-  mg_printf(nc, "%s",
-            "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
-            "*\r\nTransfer-Encoding: chunked\r\n\r\n");
-  mg_send_http_chunk(nc, "", 0);
-  pthread_mutex_unlock(&lock);
-}
-
 void handle_message(struct mg_connection *nc, struct http_message *hm) {
   struct Data *data = get_data();
   pthread_mutex_lock(&lock);
@@ -690,7 +624,50 @@ void handle_setup(struct mg_connection *nc, struct http_message *hm) {
   char buf[BUFFER_SIZE_DEFAULT];
   if (mg_get_query_string_var(&hm->query_string, "", buf, sizeof(buf)) > 0) {
   }
+  mg_printf(nc, "%s",
+            "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
+            "*\r\nTransfer-Encoding: chunked\r\n\r\n");
+  mg_send_http_chunk(nc, "", 0);
+}
 
+void handle_reset(struct mg_connection *nc, struct http_message *hm) {
+  struct Data *data = get_data();
+  pthread_mutex_lock(&lock);
+  // Очистка всех df.
+  while (data->disks_head != NULL) {
+    struct Disk *delete_disk = data->disks_head;
+    o("stop monitoring %s", delete_disk->path);
+    data->disks_head = data->disks_head->next;
+    free(delete_disk->path);
+    free(delete_disk);
+  }
+  // Убиение всех процессов.
+  struct Process *current_process = data->processes_head;
+  struct Process *prev_process = NULL;
+  struct Process *free_process = NULL;
+  while (current_process != NULL) {
+    o("stop watching '%s'", current_process->cmd);
+    if (current_process->pid > 0) {
+      current_process->action = ACTION_KILL;
+      kill(current_process->pid, SIGKILL);
+      current_process = current_process->next;
+    } else {  // процесс на паузе
+      free_process = current_process;
+      if (prev_process == NULL) {
+        current_process = data->processes_head = current_process->next;
+      } else {
+        prev_process->next = current_process->next;
+        current_process = prev_process->next;
+      }
+      free(free_process->pwd);
+      free(free_process->env);
+      free(free_process->cmd);
+      free_string_array(free_process->envs);
+      free_string_array(free_process->cmds);
+      free(free_process);
+    }
+  }
+  pthread_mutex_unlock(&lock);
   mg_printf(nc, "%s",
             "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
             "*\r\nTransfer-Encoding: chunked\r\n\r\n");
@@ -704,7 +681,21 @@ static struct mg_serve_http_opts s_http_server_opts;
 static void ev_handler(struct mg_connection *nc, int ev, void *ev_data) {
   struct http_message *hm = (struct http_message *)ev_data;
   switch (ev) {
-    case MG_EV_HTTP_REQUEST:
+    case MG_EV_HTTP_REQUEST: {
+      // Логгируем http запрос - пока так сложно...
+      char buf[1024];
+      size_t siz = sizeof(buf) / sizeof(*buf);
+      size_t i = 0;
+      for (; i < hm->method.len && i < siz; ++i) {
+        buf[i] = hm->method.p[i];
+      }
+      buf[i++] = ' ';
+      for (size_t j = 0; j < hm->uri.len && j < siz; ++j, ++i) {
+        buf[i] = hm->uri.p[j];
+      }
+      buf[i] = 0;
+      o("http %s", buf);
+
       if (mg_vcmp(&hm->uri, "/status") == 0)
         handle_status(nc);
       else if (mg_vcmp(&hm->uri, "/watch") == 0)
@@ -713,21 +704,20 @@ static void ev_handler(struct mg_connection *nc, int ev, void *ev_data) {
         handle_pause(nc, hm);
       else if (mg_vcmp(&hm->uri, "/resume") == 0)
         handle_resume(nc, hm);
-      else if (mg_vcmp(&hm->uri, "/killall") == 0)
-        handle_killall(nc);
       else if (mg_vcmp(&hm->uri, "/message") == 0)
         handle_message(nc, hm);
       else if (mg_vcmp(&hm->uri, "/out") == 0)
         handle_out(nc, hm);
       else if (mg_vcmp(&hm->uri, "/df") == 0)
         handle_df(nc, hm);
-      else if (mg_vcmp(&hm->uri, "/undf") == 0)
-        handle_undf(nc);
       else if (mg_vcmp(&hm->uri, "/setup") == 0)
         handle_setup(nc, hm);
+      else if (mg_vcmp(&hm->uri, "/reset") == 0)
+        handle_reset(nc, hm);
       else
         mg_serve_http(nc, hm, s_http_server_opts);
       break;
+    }
     default:
       break;
   }

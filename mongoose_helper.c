@@ -1,5 +1,7 @@
 #include "mongoose_helper.h"
+
 #include <string.h>
+
 int mg_get_query_string_var(const struct mg_str *buf, const char *name,
                             char *dst, size_t dst_len) {
   int len = 0;

@@ -24,8 +24,6 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm);
 
 void handle_df(struct mg_connection *nc, struct http_message *hm);
 
-void handle_undf(struct mg_connection *nc);
-
 // Останавливает процесс по его уникальному идентификатору,
 // но не удаляет его из списка для возможности повторного запуска.
 // Для возможности удалённого останова отдельного процесса,
@@ -36,8 +34,6 @@ void handle_pause(struct mg_connection *nc, struct http_message *hm);
 void handle_resume(struct mg_connection *nc, struct http_message *hm);
 
 void handle_message(struct mg_connection *nc, struct http_message *hm);
-
-void handle_killall(struct mg_connection *nc);
 
 void handle_ping(struct mg_connection *nc, struct http_message *hm);
 
