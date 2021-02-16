@@ -25,7 +25,7 @@
 #include "mongoose.h"
 #include "mongoose_helper.h"
 
-pthread_mutex_t lock;
+static pthread_mutex_t lock;
 
 void gen_json(struct Data *data) {
   const int s = 4096;  // оперативный буфер, большой не нужен
@@ -751,12 +751,11 @@ void interrupt_handler(int signum) { stop = 1; }
 
 int main() {
   logger_init();
-
   o("version dog " SOURCES_VERSION);
-  setlinebuf(stdout);
 
   if (pthread_mutex_init(&lock, NULL) != 0) {
-    o("fail mutex init\n");
+    e("pthread_mutex_init():%s", strerror(errno));
+    return 1;
   }
 
   struct Data *data = get_data();
@@ -764,7 +763,8 @@ int main() {
   prepare_data(data);
 
   if (pthread_create(&(tid[0]), NULL, &worker, NULL) != 0) {
-    o("fail thread worker\n");
+    e("pthread_create():%s", strerror(errno));
+    return 1;
   }
 
   struct mg_mgr mgr;
@@ -774,7 +774,7 @@ int main() {
   mg_mgr_init(&mgr, NULL);
   nc = mg_bind(&mgr, s_http_port, ev_handler);
   if (!nc) {
-    o("fail bind %s\n", s_http_port);
+    e("mg_bind(port %s)", s_http_port);
     return 1;
   }
   mg_set_protocol_http_websocket(nc);
