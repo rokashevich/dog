@@ -32,11 +32,6 @@ void logger_init() {
 
 void logger_reset() {}
 
-void logger_setup(const char* path) {
-  pthread_mutex_lock(&lock);
-  pthread_mutex_unlock(&lock);
-}
-
 void printer(const char* suffix, char* format, va_list arg) {
   pthread_mutex_lock(&lock);
   struct timespec ts;
