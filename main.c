@@ -354,7 +354,6 @@ void *process_worker(void *voidprocess) {
                           sizeof(**process->previous_exit_log) /
                           sizeof(*process->previous_exit_log);
         const int width = sizeof(*process->previous_exit_log);
-        o("src_siz %d lines %d width %d", src_siz, lines, width);
         cirbuf_copy_lines(process->circular_buffer, src_siz,
                           process->circular_buffer_pos,
                           process->previous_exit_log, lines, width);
