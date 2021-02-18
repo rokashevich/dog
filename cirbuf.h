@@ -26,7 +26,7 @@ void cirbuf_copy_lines(char* src_buf, int src_siz, unsigned long src_pos,
   for (int line = lines - 1; line >= 0; --line) {
     end = begin > 0 ? begin - 1 : src_siz - 1;
     begin = end > 0 ? end - 1 : src_siz - 1;
-    while (src_buf[begin] != '\n') {
+    while (src_buf[begin] != '\n' && src_buf[begin] != 0) {
       begin = begin > 0 ? begin - 1 : src_siz - 1;
     }
     begin = begin < src_siz ? begin + 1 : 0;

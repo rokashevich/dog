@@ -20,7 +20,6 @@
 const char *thermal_zone_type[] = {"x86_pkg_temp",      // x64
                                    "imx_thermal_zone",  // imx.6
                                    NULL};
-
 static struct Data data;
 
 struct Data *get_data(void) {
@@ -167,7 +166,7 @@ void prepare_data(struct Data *data) {
       }
     }
   }
-  sleep(SLEEP);
+  //  sleep(SLEEP);
 }
 
 // https://stackoverflow.com/questions/4229415/c-sysinfo-returning-bad-values-i686

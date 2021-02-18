@@ -20,18 +20,17 @@ enum Action {
 struct Process {
   // Для хранения параметров запуска в переданном через POST запрос виде.
   unsigned int id;  // Уникальный идентификатор (не pid!).
-  char *pwd;        // /opt/sandbox/bin
-  char *env;        // DISPLAY=$DISPLAY LD_LIBRARY_PATH=.:../lib
-  char *cmd;        // program --arg-one 1 --arg-two 2
+  char pwd[1024];  // /opt/sandbox/bin
+  char env[1024];  // DISPLAY=$DISPLAY LD_LIBRARY_PATH=.:../lib
+  char cmd[1024];  // program --arg-one 1 --arg-two 2
 
   char circular_buffer[1024];  // Для stdout + stderr.
   unsigned long circular_buffer_pos;
   char previous_exit_reason[256];
-  char previous_exit_log[5][128];  // Для последних строк перед падением.
+  char previous_exit_log[5][256];  // Для последних строк перед падением.
 
   // Для хранения двухмерного массива параметров запуска в том виде,
   // в котором они используются для вызова execvpe().
-  char **envs;
   char **cmds;
 
   pid_t pid;
@@ -53,6 +52,7 @@ struct Data {
   struct Process *processes_head;
   struct Msg *msgs_head;
 
+  char env[4096];  // должно хватить :)
   char version[32];
   char hostname[64];
   char boot_id[37];    // /proc/sys/kernel/random/boot_id >

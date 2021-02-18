@@ -191,18 +191,59 @@ void handle_status(struct mg_connection *nc) {
 void *process_worker(void *voidprocess) {
   struct Process *process = (struct Process *)voidprocess;
   struct Data *data = get_data();
+
+  pthread_mutex_lock(&lock);
+  int env_proces_len = strlen(process->env);
+  int env_common_len = strlen(data->env);
+  char env[env_common_len + env_proces_len + 2];
+  strcpy(env, data->env);
+  strcat(env, " ");
+  strcat(env, process->env);
+  pthread_mutex_unlock(&lock);
+
   int filedes[2];
   if (pipe(filedes) == -1) {
     e("pipe():%s", strerror(errno));
     return NULL;
   }
+
   process->pid = fork();
   while (1) {
     if (process->pid == -1) {
       e("fork():%s", strerror(errno));
     } else if (process->pid == 0) {  // Внутри child-а.
+      // Выставляем переменные окружения.
+      // int common_env_siz = strlen(data->env)
+      char name[256] = {0};
+      char val[4096] = {0};
+      bool is_name = true;
+      unsigned long pos = 0;
+      do {
+        const char c = env[pos];
+        if (is_name && c != '=') {
+          name[strlen(name)] = c;
+        } else if (c == '=') {
+          is_name = false;
+        } else if (!is_name && (c != ' ' && c != 0)) {
+          //          fprintf(stderr, "!!!%c\n", c);
+          val[strlen(val)] = c;
+        } else if (!is_name && (c == ' ' || c == 0)) {
+          is_name = true;
+
+          memset(name, 0, sizeof name / sizeof *name);
+          memset(val, 0, sizeof val / sizeof *val);
+        }
+      } while (++pos < strlen(env));
       // Убиваем child, если parent завершился.
       prctl(PR_SET_PDEATHSIG, SIGKILL);
+
+      if (strlen(process->pwd)) {
+        if (chdir(process->pwd) != 0) {
+          w("chdir(%s):%s", process->pwd, strerror(errno));
+          exit(1);
+        }
+      }
+
       while ((dup2(filedes[1], STDOUT_FILENO) == -1) && (errno == EINTR))
         ;
       while ((dup2(filedes[1], STDERR_FILENO) == -1) && (errno == EINTR))
@@ -210,19 +251,15 @@ void *process_worker(void *voidprocess) {
       close(filedes[0]);
       close(filedes[1]);
 
-      if (strlen(process->pwd)) {
-        if (chdir(process->pwd) != 0) {
-          fprintf(stdout, "chdir(%s):%s\n", process->pwd, strerror(errno));
-          return NULL;
-        }
-      }
-      execvpe(process->cmds[0], process->cmds, process->envs);
-      fprintf(stdout, "execvpe():%s\n", strerror(errno));
+      extern char **environ;
+      execvpe(process->cmds[0], process->cmds, environ);
       exit(1);
     } else {  // parent
       close(filedes[1]);
-      o("exec #%d cd '%s'&&%s %s", process->restarts_counter, process->pwd,
-        process->env, process->cmd);
+      pthread_mutex_lock(&lock);
+      pthread_mutex_unlock(&lock);
+      o("exec()%d│%s│%s│%s│%s│", process->restarts_counter, data->env,
+        process->env, process->pwd, process->cmd);
 
       ssize_t nread;
       char buffer[1024];
@@ -254,28 +291,28 @@ void *process_worker(void *voidprocess) {
       int status;
       while (waitpid(process->pid, &status, 0) == -1) {
         if (errno != EINTR) {
-          w("waitpid():%s", strerror(errno));
+          e("waitpid():%s", strerror(errno));
         }
       }
+
       char *buf = process->previous_exit_reason;
       int siz = sizeof(process->previous_exit_reason) /
                 sizeof(*process->previous_exit_reason);
       if (WIFEXITED(status)) {
-        snprintf(buf, siz, "Exit code %d\n", WEXITSTATUS(status));
+        snprintf(buf, siz, "Exit code %d", WEXITSTATUS(status));
       } else if (WIFSTOPPED(status)) {
         snprintf(buf, siz, "Child stopped by signal %d (%s)", WSTOPSIG(status),
                  strsignal(WSTOPSIG(status)));
       } else if (WIFSIGNALED(status)) {
         snprintf(buf, siz, "Child killed by signal %d (%s)", WTERMSIG(status),
                  strsignal(WTERMSIG(status)));
-      } else {
-        const char *msg = "Exit reason unknown!";
-        w("%s", msg);
-        snprintf(buf, siz, "%s\n", msg);
-      }
+      } else
+        snprintf(buf, siz, "Exit reason unknown!");
+      w("waitpid():%d=%s", status, buf);
       close(filedes[0]);
 
       if (process->action == ACTION_KILL) {
+        fprintf(stderr, "ACTION_KILL cleanup?\n");
         pthread_mutex_lock(&lock);
         struct Process *current_process = data->processes_head;
         struct Process *prev_process = NULL;
@@ -292,7 +329,7 @@ void *process_worker(void *voidprocess) {
             free(free_process->pwd);
             free(free_process->env);
             free(free_process->cmd);
-            free_string_array(free_process->envs);
+            //            free_string_array(free_process->envs);
             free_string_array(free_process->cmds);
             free(free_process);
           } else {
@@ -303,24 +340,28 @@ void *process_worker(void *voidprocess) {
         pthread_mutex_unlock(&lock);
         break;
       } else if (process->action == ACTION_PAUSE) {
+        fprintf(stderr, "ACTION_PAUSE\n");
         process->pid = 0;
         process->restarts_counter = 0;
         break;
       } else {  // Процесс завершился не по нашему запросу, а погиб.
         // Сохраняем из буффера перехваченных stdout/stderr последние n строк в
         // буффер хранения окончания вывода погибшего процесса.
+
         const int src_siz = sizeof(process->circular_buffer) /
                             sizeof(*process->circular_buffer);
         const int lines = sizeof(process->previous_exit_log) /
                           sizeof(**process->previous_exit_log) /
                           sizeof(*process->previous_exit_log);
         const int width = sizeof(*process->previous_exit_log);
+        o("src_siz %d lines %d width %d", src_siz, lines, width);
         cirbuf_copy_lines(process->circular_buffer, src_siz,
                           process->circular_buffer_pos,
                           process->previous_exit_log, lines, width);
         cirbuf_clear(process->circular_buffer, src_siz,
                      &process->circular_buffer_pos);
-        sleep(3);
+        sleep(1);
+
         process->restarts_counter++;
         if (pipe(filedes) == -1) {
           e("pipe():%s", strerror(errno));
@@ -363,22 +404,18 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
   // и заполняем соотвествующие поля в структуре Process.
 
   char buf[1024];
-  int siz;
 
   mg_get_http_var(&hm->body, "pwd", buf, sizeof(buf));
-  siz = strlen(buf) + 1;
-  new_process->pwd = malloc(siz * sizeof(char));
-  strncpy(new_process->pwd, buf, siz);
+  strncpy(new_process->pwd, buf,
+          sizeof new_process->pwd / sizeof *new_process->pwd);
 
   mg_get_http_var(&hm->body, "env", buf, sizeof(buf));
-  siz = strlen(buf) + 1;
-  new_process->env = malloc(siz * sizeof(char));
-  strncpy(new_process->env, buf, siz);
+  strncpy(new_process->env, buf,
+          sizeof new_process->env / sizeof *new_process->env);
 
   mg_get_http_var(&hm->body, "cmd", buf, sizeof(buf));
-  siz = strlen(buf) + 1;
-  new_process->cmd = malloc(siz * sizeof(char));
-  strncpy(new_process->cmd, buf, siz);
+  strncpy(new_process->cmd, buf,
+          sizeof new_process->cmd / sizeof *new_process->cmd);
 
   new_process->circular_buffer_pos = 0;
   memset(new_process->circular_buffer, '\0',
@@ -397,9 +434,8 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
   o("watch pwd,env,cmd=│%s│%s│%s│", new_process->pwd, new_process->env,
     new_process->cmd);
 
-  new_process->envs = string_to_string_array(new_process->env);
+  //  new_process->envs = string_to_string_array(new_process->env);
   new_process->cmds = string_to_string_array(new_process->cmd);
-
   new_process->restarts_counter = 0;
   new_process->pid = 0;
 
@@ -436,6 +472,15 @@ void handle_pause(struct mg_connection *nc, struct http_message *hm) {
             "*\r\nTransfer-Encoding: chunked\r\n\r\n");
   mg_send_http_chunk(nc, "", 0);
   pthread_mutex_unlock(&lock);
+}
+
+void handle_debug(struct mg_connection *nc, struct http_message *hm) {
+  char *buf = "debug";
+  mg_printf(nc, "%s",
+            "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
+            "*\r\nTransfer-Encoding: chunked\r\n\r\n");
+  mg_printf_http_chunk(nc, buf);
+  mg_send_http_chunk(nc, "", 0);
 }
 
 void handle_resume(struct mg_connection *nc, struct http_message *hm) {
@@ -517,7 +562,6 @@ void handle_message(struct mg_connection *nc, struct http_message *hm) {
 }
 
 void handle_out(struct mg_connection *nc, struct http_message *hm) {
-  o("http_request out %s", hm->body.p);
   mg_printf(nc, "%s",
             "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\n"
             "Content-Type: text/plain; charset=UTF-8\r\n"
@@ -531,14 +575,7 @@ void handle_out(struct mg_connection *nc, struct http_message *hm) {
     struct Process *current_process = data->processes_head;
     while (current_process != NULL) {
       if (current_process->id == request_id) {
-        const char *sep1 =
-            "---previous exit log--------------------"
-            "----------------------------------------\n";
-        const char *sep2 =
-            "---current state------------------------"
-            "----------------------------------------\n";
         const unsigned long siz =
-            strlen(sep1) + strlen(sep2) +
             sizeof(current_process->previous_exit_log) /
                 sizeof(**current_process->previous_exit_log) +
             sizeof(current_process->previous_exit_reason) /
@@ -550,24 +587,27 @@ void handle_out(struct mg_connection *nc, struct http_message *hm) {
             512;
         char buf[siz];
         memset(buf, 0, sizeof(buf) / sizeof(*buf));
-        sprintf(buf, "cd '%s'&&%s %s\n", current_process->pwd,
+        sprintf(buf, ">>> cd '%s'&&%s %s\n", current_process->pwd,
                 current_process->env, current_process->cmd);
-        if (strlen(current_process->previous_exit_reason)) {
-          strcat(buf, sep1);
-          const int lines = sizeof(current_process->previous_exit_log) /
-                            sizeof(**current_process->previous_exit_log) /
-                            sizeof(*current_process->previous_exit_log);
-          for (int i = 0; i < lines; ++i) {
-            const char *line = current_process->previous_exit_log[i];
-            if (strlen(line)) {
-              strcat(buf, line);
-              strcat(buf, "\n");
-            }
+        sprintf(buf + strlen(buf), ">>> fails: %d reason: %s%s",
+                current_process->restarts_counter,
+                current_process->restarts_counter
+                    ? current_process->previous_exit_reason
+                    : "-",
+                current_process->restarts_counter ? " stdout/stderr:\n" : "");
+        const int lines = sizeof(current_process->previous_exit_log) /
+                          sizeof(**current_process->previous_exit_log) /
+                          sizeof(*current_process->previous_exit_log);
+        for (int i = 0; i < lines; ++i) {
+          const char *line = current_process->previous_exit_log[i];
+          if (strlen(line)) {
+            strcat(buf, line);
+            strcat(buf, "\n");
           }
-          strcat(buf, current_process->previous_exit_reason);
-          strcat(buf, "\n");
         }
-        strcat(buf, sep2);
+        strcat(buf, "\n");
+
+        strcat(buf, ">>> current stdout/stderr:\n");
         unsigned long length = strlen(buf);
         for (unsigned long i = current_process->circular_buffer_pos; i < siz;
              ++i, ++length) {
@@ -621,9 +661,11 @@ void handle_df(struct mg_connection *nc, struct http_message *hm) {
 }
 
 void handle_setup(struct mg_connection *nc, struct http_message *hm) {
-  char buf[BUFFER_SIZE_DEFAULT];
-  if (mg_get_query_string_var(&hm->query_string, "", buf, sizeof(buf)) > 0) {
-  }
+  pthread_mutex_lock(&lock);
+  struct Data *data = get_data();
+  mg_get_http_var(&hm->body, "env", data->env,
+                  sizeof data->env / sizeof *data->env);
+  pthread_mutex_unlock(&lock);
   mg_printf(nc, "%s",
             "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
             "*\r\nTransfer-Encoding: chunked\r\n\r\n");
@@ -662,7 +704,7 @@ void handle_reset(struct mg_connection *nc, struct http_message *hm) {
       free(free_process->pwd);
       free(free_process->env);
       free(free_process->cmd);
-      free_string_array(free_process->envs);
+      //      free_string_array(free_process->envs);
       free_string_array(free_process->cmds);
       free(free_process);
     }
@@ -709,9 +751,23 @@ static void ev_handler(struct mg_connection *nc, int ev, void *ev_data) {
       for (; i < hm->method.len && i < siz; ++i) {
         buf[i] = hm->method.p[i];
       }
-      buf[i++] = ' ';
-      for (size_t j = 0; j < hm->uri.len && j < siz; ++j, ++i) {
-        buf[i] = hm->uri.p[j];
+      if (hm->uri.len) {
+        buf[i++] = ' ';
+        for (size_t j = 0; j < hm->uri.len && j < siz; ++j, ++i) {
+          buf[i] = hm->uri.p[j];
+        }
+      }
+      if (hm->query_string.len) {
+        buf[i++] = '?';
+        for (size_t j = 0; j < hm->query_string.len && j < siz; ++j, ++i) {
+          buf[i] = hm->query_string.p[j];
+        }
+      }
+      if (hm->body.len) {
+        buf[i++] = ' ';
+        for (size_t j = 0; j < hm->body.len && j < siz; ++j, ++i) {
+          buf[i] = hm->body.p[j];
+        }
       }
       buf[i] = 0;
       o("http %s", buf);
@@ -734,6 +790,8 @@ static void ev_handler(struct mg_connection *nc, int ev, void *ev_data) {
         handle_setup(nc, hm);
       else if (mg_vcmp(&hm->uri, "/reset") == 0)
         handle_reset(nc, hm);
+      else if (mg_vcmp(&hm->uri, "/debug") == 0)
+        handle_debug(nc, hm);
       else
         mg_serve_http(nc, hm, s_http_server_opts);
       break;
