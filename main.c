@@ -212,6 +212,7 @@ void *process_worker(void *voidprocess) {
     if (process->pid == -1) {
       e("fork():%s", strerror(errno));
     } else if (process->pid == 0) {  // Внутри child-а.
+      //
       // Выставляем переменные окружения.
       // int common_env_siz = strlen(data->env)
       char name[256] = {0};
@@ -225,11 +226,10 @@ void *process_worker(void *voidprocess) {
         } else if (c == '=') {
           is_name = false;
         } else if (!is_name && (c != ' ' && c != 0)) {
-          //          fprintf(stderr, "!!!%c\n", c);
           val[strlen(val)] = c;
         } else if (!is_name && (c == ' ' || c == 0)) {
+          fprintf(stderr, "%s=%s\n", name, val);
           is_name = true;
-
           memset(name, 0, sizeof name / sizeof *name);
           memset(val, 0, sizeof val / sizeof *val);
         }

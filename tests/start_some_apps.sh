@@ -9,5 +9,5 @@
 
 #curl -X POST http://localhost:14157/setup -d "env=A=a B=b LD_LIBRARY_PATH=4:5:6"
 #curl -X POST http://localhost:14157/watch -d 'env=C=c D=d LD_LIBRARY_PATH=1:2:3:$LD_LIBRARY_PATH X=x&pwd=`pwd`&cmd=bash env.sh'
-curl -X POST http://localhost:14157/watch -d 'pwd=/opt/rokashevich/dog/tests&cmd=/bin/bash env.sh'
+curl -X POST http://localhost:14157/watch -d 'env=C=c D=d LD_LIBRARY_PATH=1:2:3:$LD_LIBRARY_PATH X=x&pwd=/opt/rokashevich/dog/tests&cmd=/bin/bash env.sh'
 
