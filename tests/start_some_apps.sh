@@ -7,7 +7,6 @@
 #curl -X POST http://localhost:14157/watch -d "env=A=a B=b C=c&cmd=glxgears"
 #curl -X POST http://localhost:14157/watch -d "cmd=glxgears"
 
-#curl -X POST http://localhost:14157/setup -d "env=A=a B=b LD_LIBRARY_PATH=4:5:6"
-#curl -X POST http://localhost:14157/watch -d 'env=C=c D=d LD_LIBRARY_PATH=1:2:3:$LD_LIBRARY_PATH X=x&pwd=`pwd`&cmd=bash env.sh'
-curl -X POST http://localhost:14157/watch -d 'env=C=c D=d LD_LIBRARY_PATH=1:2:3:$LD_LIBRARY_PATH X=x&pwd=/opt/rokashevich/dog/tests&cmd=/bin/bash env.sh'
+curl -X POST http://localhost:14157/setup -d "env=C=c CC=cc LD_LIBRARY_PATH=1:2:3"
+curl -X POST http://localhost:14157/watch -d 'env=P=p P=pp LD_LIBRARY_PATH=$LD_LIBRARY_PATH:4:5:6:$a:$bb:$cc X=x&pwd=/opt/rokashevich/dog/tests&cmd=/bin/bash env.sh'
 

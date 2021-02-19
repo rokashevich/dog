@@ -27,29 +27,6 @@ struct Data *get_data(void) {
 }
 
 void prepare_data(struct Data *data) {
-  // Очищаем переменные окружения.
-  // Переменные окружения хранятся в extern char **environ определённом в
-  // unistd.h в виде указателей на строки "NAME=VAL" (PATH=/bin:/usr/bin).
-  // Чтобы их очистить нельзя это делать итерируясь в одном цикле и вызывая
-  // unsetenv(name) т.к. эта функция будет изменять смещения в **environ и в
-  // итоге вы не пройдёте по всем переменным. Надо сперва сохранить все имена в
-  // независимую копию и только потом их удалить.
-  {
-    extern char **environ;
-    int env_num = 0;
-    int max_len = 0;
-    for (; environ[env_num]; ++env_num) {
-      int cur_len = strlen(environ[env_num]);
-      if (cur_len > max_len) max_len = cur_len;
-    }
-    char env_buf[env_num][max_len];
-    for (int i = 0; i < env_num; ++i) {
-      strcpy(env_buf[i], environ[i]);
-      env_buf[i][strchr(env_buf[i], '=') - env_buf[i]] = 0;
-    }
-    for (int i = 0; i < env_num; ++i) unsetenv(env_buf[i]);
-  }
-
   char buf[64];
   unsigned int i;
   FILE *f;

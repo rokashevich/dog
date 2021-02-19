@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 char* qstrcat(char* dest, char* src) {
   while (*dest) dest++;
@@ -223,4 +224,65 @@ char* strip(char* s) {
   const int len = strlen(s);
   printf("%d-", len);
   return s;
+}
+
+void setup_environ_from_string(const char* s) {
+  // Очищаем текущее окружение.
+  extern char** environ;
+  int env_num = 0;
+  int max_len = 0;
+  for (; environ[env_num]; ++env_num) {
+    int cur_len = strlen(environ[env_num]);
+    if (cur_len > max_len) max_len = cur_len;
+  }
+  char env_buf[env_num][max_len];
+  for (int i = 0; i < env_num; ++i) {
+    strcpy(env_buf[i], environ[i]);
+    env_buf[i][strchr(env_buf[i], '=') - env_buf[i]] = 0;
+  }
+  for (int i = 0; i < env_num; ++i) unsetenv(env_buf[i]);
+  // Итерируемся по переданной строке и экспортируем name=val.
+  int max_siz = strlen(s);
+  char name[max_siz];
+  char val[max_siz];
+  char exp[max_siz];
+  memset(name, 0, sizeof name / sizeof *name);
+  memset(val, 0, sizeof val / sizeof *val);
+  memset(exp, 0, sizeof exp / sizeof *exp);
+  bool is_name = true;
+  unsigned long pos = 0;
+  do {
+    const char c = s[pos];
+    if (is_name && c != '=') {
+      name[strlen(name)] = c;
+    } else if (c == '=') {
+      is_name = false;
+    } else if (!is_name && (c != ' ' && c != 0)) {
+      val[strlen(val)] = c;
+    } else if (!is_name && (c == ' ' || c == 0)) {
+      // В val у нас значение переменной name.
+      // В нём надо раскрыть переменные, если есть.
+      char* begin = val;
+      char* end = begin;
+      while ((begin = strchr(begin, '$'))) {
+        if (begin > end) strncat(exp, end, begin - end);
+        end = strchr(begin, ':');
+        if (!end) end = strchr(begin, ' ');
+        if (!end) end = strchr(begin, 0);
+        char var[end - begin];
+        strncpy(var, begin, end - begin);
+        char* got = getenv(var + 1);
+        if (got) {
+          strcat(exp, got);
+        }
+        begin = end;
+      }
+      strcat(exp, end);
+      setenv(name, exp, 1);
+      is_name = true;
+      memset(name, 0, sizeof name / sizeof *name);
+      memset(val, 0, sizeof val / sizeof *val);
+      memset(exp, 0, sizeof exp / sizeof *exp);
+    }
+  } while (++pos < strlen(s));
 }

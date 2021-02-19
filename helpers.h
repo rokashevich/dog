@@ -26,4 +26,7 @@ int match(const char* pattern, const char* candidate, int p, int c);
 // на новую строку.
 char* strip(char* s);
 
+// Очищаем окружение и выставляем новое из строки вида "A=a B=b C=$B:d"
+void setup_environ_from_string(const char* s);
+
 #endif  // HELPERS_H

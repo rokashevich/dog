@@ -192,15 +192,6 @@ void *process_worker(void *voidprocess) {
   struct Process *process = (struct Process *)voidprocess;
   struct Data *data = get_data();
 
-  pthread_mutex_lock(&lock);
-  int env_proces_len = strlen(process->env);
-  int env_common_len = strlen(data->env);
-  char env[env_common_len + env_proces_len + 2];
-  strcpy(env, data->env);
-  strcat(env, " ");
-  strcat(env, process->env);
-  pthread_mutex_unlock(&lock);
-
   int filedes[2];
   if (pipe(filedes) == -1) {
     e("pipe():%s", strerror(errno));
@@ -212,30 +203,16 @@ void *process_worker(void *voidprocess) {
     if (process->pid == -1) {
       e("fork():%s", strerror(errno));
     } else if (process->pid == 0) {  // Внутри child-а.
-      //
-      // Выставляем переменные окружения.
-      // int common_env_siz = strlen(data->env)
-      char name[256] = {0};
-      char val[4096] = {0};
-      bool is_name = true;
-      unsigned long pos = 0;
-      do {
-        const char c = env[pos];
-        if (is_name && c != '=') {
-          name[strlen(name)] = c;
-        } else if (c == '=') {
-          is_name = false;
-        } else if (!is_name && (c != ' ' && c != 0)) {
-          val[strlen(val)] = c;
-        } else if (!is_name && (c == ' ' || c == 0)) {
-          fprintf(stderr, "%s=%s\n", name, val);
-          is_name = true;
-          memset(name, 0, sizeof name / sizeof *name);
-          memset(val, 0, sizeof val / sizeof *val);
-        }
-      } while (++pos < strlen(env));
       // Убиваем child, если parent завершился.
       prctl(PR_SET_PDEATHSIG, SIGKILL);
+
+      int env_common_len = strlen(data->env);
+      int env_proces_len = strlen(process->env);
+      char env[env_common_len + env_proces_len + 2];
+      strcpy(env, data->env);
+      strcat(env, " ");
+      strcat(env, process->env);
+      setup_environ_from_string(env);
 
       if (strlen(process->pwd)) {
         if (chdir(process->pwd) != 0) {
