@@ -229,14 +229,11 @@ void *process_worker(void *voidprocess) {
       close(filedes[1]);
 
       extern char **environ;
-      execvpe(process->cmds[0], process->cmds, environ);
-      exit(1);
+      exit(execvpe(process->cmds[0], process->cmds, environ));
     } else {  // parent
       close(filedes[1]);
       pthread_mutex_lock(&lock);
       pthread_mutex_unlock(&lock);
-      o("exec()%d│%s│%s│%s│%s│", process->restarts_counter, data->env,
-        process->env, process->pwd, process->cmd);
 
       ssize_t nread;
       char buffer[1024];
@@ -266,11 +263,8 @@ void *process_worker(void *voidprocess) {
         }
       }
       int status;
-      while (waitpid(process->pid, &status, 0) == -1) {
-        if (errno != EINTR) {
-          e("waitpid():%s", strerror(errno));
-        }
-      }
+      while (waitpid(process->pid, &status, 0) == -1)
+        if (errno != EINTR) e("waitpid()%s", strerror(errno));
 
       char *buf = process->previous_exit_reason;
       int siz = sizeof(process->previous_exit_reason) /
@@ -285,7 +279,14 @@ void *process_worker(void *voidprocess) {
                  strsignal(WTERMSIG(status)));
       } else
         snprintf(buf, siz, "Exit reason unknown!");
-      w("waitpid():%d=%s", status, buf);
+      o("quit %d│%s│%s", process->restarts_counter, buf, process->cmd);
+      const int lines = sizeof(process->previous_exit_log) /
+                        sizeof(**process->previous_exit_log) /
+                        sizeof(*process->previous_exit_log);
+      for (int i = 0; i < lines; ++i) {
+        const char *line = process->previous_exit_log[i];
+        if (strlen(line)) m(" %s\n", line);
+      }
       close(filedes[0]);
 
       if (process->action == ACTION_KILL) {
@@ -336,12 +337,12 @@ void *process_worker(void *voidprocess) {
                           process->previous_exit_log, lines, width);
         cirbuf_clear(process->circular_buffer, src_siz,
                      &process->circular_buffer_pos);
-        sleep(1);
+        sleep(2);
 
         process->restarts_counter++;
         if (pipe(filedes) == -1) {
           e("pipe():%s", strerror(errno));
-          continue;
+          return NULL;
         }
         process->pid = fork();
       }
@@ -405,10 +406,6 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
   memset(new_process->previous_exit_reason, '\0',
          sizeof(new_process->previous_exit_reason) /
              sizeof(*new_process->previous_exit_reason));
-
-  // ctrl+shitf+u,2502
-  o("watch pwd,env,cmd=│%s│%s│%s│", new_process->pwd, new_process->env,
-    new_process->cmd);
 
   //  new_process->envs = string_to_string_array(new_process->env);
   new_process->cmds = string_to_string_array(new_process->cmd);
@@ -724,15 +721,11 @@ static void ev_handler(struct mg_connection *nc, int ev, void *ev_data) {
       char buf[1024];
       size_t siz = sizeof(buf) / sizeof(*buf);
       size_t i = 0;
-      for (; i < hm->method.len && i < siz; ++i) {
-        buf[i] = hm->method.p[i];
+
+      for (size_t j = 0; j < hm->uri.len && j < siz; ++j, ++i) {
+        buf[i] = hm->uri.p[j];
       }
-      if (hm->uri.len) {
-        buf[i++] = ' ';
-        for (size_t j = 0; j < hm->uri.len && j < siz; ++j, ++i) {
-          buf[i] = hm->uri.p[j];
-        }
-      }
+
       if (hm->query_string.len) {
         buf[i++] = '?';
         for (size_t j = 0; j < hm->query_string.len && j < siz; ++j, ++i) {
@@ -793,7 +786,11 @@ void interrupt_handler(int signum) { stop = 1; }
 
 int main() {
   logger_init();
-  o("version dog " SOURCES_VERSION);
+  m("Log format:\n");
+  m("YYMMDDhhmmss quit N│reason│cmd\n");
+  m("[space]most recent stdout/stderr of the quit process\n");
+  m("version program " SOURCES_VERSION "\n");
+  m("version mongoose " MG_VERSION "\n");
 
   if (pthread_mutex_init(&lock, NULL) != 0) {
     e("pthread_mutex_init():%s", strerror(errno));
@@ -812,7 +809,6 @@ int main() {
   struct mg_mgr mgr;
   struct mg_connection *nc;
 
-  o("version mongoose " MG_VERSION);
   mg_mgr_init(&mgr, NULL);
   nc = mg_bind(&mgr, s_http_port, ev_handler);
   if (!nc) {

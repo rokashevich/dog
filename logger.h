@@ -7,5 +7,6 @@ void logger_init();
 void o(char *, ...);
 void w(char *, ...);
 void e(char *, ...);
+void m(char *, ...);
 
 #endif  // LOGGER_H

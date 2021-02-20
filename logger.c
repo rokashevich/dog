@@ -32,16 +32,19 @@ void logger_init() {
 
 void logger_reset() {}
 
-void printer(const char* suffix, char* format, va_list arg) {
+void printer(int with_timestamp, const char* suffix, char* format,
+             va_list arg) {
   pthread_mutex_lock(&lock);
   struct timespec ts;
   clock_gettime(CLOCK_REALTIME, &ts);
   struct tm* ptm = localtime(&ts.tv_sec);
 
-  fprintf(stdout, "%d%02d%02d%02d%02d%02d", ptm->tm_year - 100, ptm->tm_mon + 1,
-          ptm->tm_mday, ptm->tm_hour, ptm->tm_min, ptm->tm_sec);
-  fprintf(stdout, "%s", suffix);
-
+  if (with_timestamp) {
+    fprintf(stdout, "%d%02d%02d%02d%02d%02d", ptm->tm_year - 100,
+            ptm->tm_mon + 1, ptm->tm_mday, ptm->tm_hour, ptm->tm_min,
+            ptm->tm_sec);
+    fprintf(stdout, "%s", suffix);
+  }
   char* traverse = format;
   unsigned int i;
   char* s;
@@ -76,7 +79,7 @@ void printer(const char* suffix, char* format, va_list arg) {
     }
     traverse++;
   }
-  fprintf(stdout, "\n");
+  if (with_timestamp) fprintf(stdout, "\n");
   fflush(stdout);
   pthread_mutex_unlock(&lock);
 }
@@ -84,20 +87,27 @@ void printer(const char* suffix, char* format, va_list arg) {
 void o(char* format, ...) {
   va_list args;
   va_start(args, format);
-  printer(" ", format, args);
+  printer(1, " ", format, args);
   va_end(args);
 }
 
 void w(char* format, ...) {
   va_list args;
   va_start(args, format);
-  printer("!", format, args);
+  printer(1, "!", format, args);
   va_end(args);
 }
 
 void e(char* format, ...) {
   va_list args;
   va_start(args, format);
-  printer("*", format, args);
+  printer(1, "*", format, args);
+  va_end(args);
+}
+
+void m(char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  printer(0, NULL, format, args);
   va_end(args);
 }
