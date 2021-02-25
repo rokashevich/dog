@@ -15,6 +15,7 @@
 #include <sys/prctl.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sysexits.h>
 #include <unistd.h>
 
 #include "cirbuf.h"
@@ -214,19 +215,19 @@ void *process_worker(void *voidprocess) {
       strcat(env, process->env);
       setup_environ_from_string(env);
 
-      if (strlen(process->pwd)) {
-        if (chdir(process->pwd) != 0) {
-          w("chdir(%s):%s", process->pwd, strerror(errno));
-          exit(1);
-        }
-      }
-
       while ((dup2(filedes[1], STDOUT_FILENO) == -1) && (errno == EINTR))
         ;
       while ((dup2(filedes[1], STDERR_FILENO) == -1) && (errno == EINTR))
         ;
       close(filedes[0]);
       close(filedes[1]);
+
+      if (strlen(process->pwd)) {
+        if (chdir(process->pwd) != 0) {
+          fprintf(stderr, "chdir(%s):%s", process->pwd, strerror(errno));
+          exit(EX_USAGE);
+        }
+      }
 
       extern char **environ;
       exit(execvpe(process->cmds[0], process->cmds, environ));

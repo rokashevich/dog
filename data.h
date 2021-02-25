@@ -24,7 +24,7 @@ struct Process {
   char env[1024];  // DISPLAY=$DISPLAY LD_LIBRARY_PATH=.:../lib
   char cmd[1024];  // program --arg-one 1 --arg-two 2
 
-  char circular_buffer[1024];  // Для stdout + stderr.
+  char circular_buffer[4096];  // Для stdout + stderr.
   unsigned long circular_buffer_pos;
   char previous_exit_reason[256];
   char previous_exit_log[5][256];  // Для последних строк перед падением.
