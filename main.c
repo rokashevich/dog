@@ -265,7 +265,6 @@ void *process_worker(void *voidprocess) {
       int status;
       while (waitpid(process->pid, &status, 0) == -1)
         if (errno != EINTR) e("waitpid()%s", strerror(errno));
-
       char *buf = process->previous_exit_reason;
       int siz = sizeof(process->previous_exit_reason) /
                 sizeof(*process->previous_exit_reason);
@@ -285,7 +284,7 @@ void *process_worker(void *voidprocess) {
                         sizeof(*process->previous_exit_log);
       for (int i = 0; i < lines; ++i) {
         const char *line = process->previous_exit_log[i];
-        if (strlen(line)) m(" %s\n", line);
+        if (strlen(line)) m("│%s\n", line);
       }
       close(filedes[0]);
 
@@ -578,9 +577,8 @@ void handle_out(struct mg_connection *nc, struct http_message *hm) {
             strcat(buf, "\n");
           }
         }
-        strcat(buf, "\n");
 
-        strcat(buf, ">>> current stdout/stderr:\n");
+        strcat(buf, "\n>>> current stdout/stderr:\n");
         unsigned long length = strlen(buf);
         for (unsigned long i = current_process->circular_buffer_pos; i < siz;
              ++i, ++length) {

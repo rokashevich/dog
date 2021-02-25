@@ -11,6 +11,9 @@ void cirbuf_clear(char* src_buf, int src_siz, unsigned long* src_pos) {
 
 void cirbuf_copy_lines(char* src_buf, int src_siz, unsigned long src_pos,
                        void* dst_buf, int lines, int width) {
+  // Очищаем буфер назначения.
+  memset(dst_buf, 0, lines * width);
+
   // Отладочный вывод содержимого циклического буфера:
   //  fprintf(stderr, "- CIRBUF BEGIN (pos: %c) --------------------------\n",
   //          src_buf[src_pos]);
@@ -21,20 +24,25 @@ void cirbuf_copy_lines(char* src_buf, int src_siz, unsigned long src_pos,
 
   char(*dst)[width] = dst_buf;
 
-  unsigned long begin = src_pos;
-  unsigned long end;
-  for (int line = lines - 1; line >= 0; --line) {
-    end = begin > 0 ? begin - 1 : src_siz - 1;
-    begin = end > 0 ? end - 1 : src_siz - 1;
-    while (src_buf[begin] != '\n' && src_buf[begin] != 0) {
-      begin = begin > 0 ? begin - 1 : src_siz - 1;
-    }
-    begin = begin < src_siz ? begin + 1 : 0;
-    if (begin < end)
-      strncpy(dst[line], src_buf + begin, end - begin);
-    else {
-      strncpy(dst[line], src_buf + begin, src_siz - begin);
-      strncpy(dst[line] + src_siz - begin, src_buf, end);
+  unsigned long pos = src_pos > 0 ? src_pos - 1 : src_siz - 1;
+  while (pos != src_pos) {
+    pos = pos > 0 ? pos - 1 : src_siz - 1;
+    if (src_buf[pos] == '\n') --lines;
+    if (src_buf[pos] == 0 || lines == 0) {
+      pos = pos < src_siz - 1 ? pos + 1 : 0;
+      int l = 0;
+      int w = 0;
+      while (pos != src_pos) {
+        if (src_buf[pos] != '\n') {
+          if (w < width) dst[l][w++] = src_buf[pos];
+        } else {
+          dst[l][w] = 0;
+          l++;
+          w = 0;
+        }
+        pos = pos < src_siz - 1 ? pos + 1 : 0;
+      }
+      break;
     }
   }
 
