@@ -602,36 +602,6 @@ void handle_out(struct mg_connection *nc, struct http_message *hm) {
   mg_send_http_chunk(nc, "", 0);
 }
 
-void handle_df(struct mg_connection *nc, struct http_message *hm) {
-  struct Data *data = get_data();
-  char buf[BUFFER_SIZE_DEFAULT];
-  if (mg_get_http_var(&hm->body, "path", buf, sizeof(buf)) > 0) {
-    printf("handle_df: path=%s\n", buf);
-    struct Disk *new_disk;
-    if (data->disks_head == NULL) {
-      data->disks_head = malloc(sizeof(struct Disk));
-      data->disks_head->next = NULL;
-      new_disk = data->disks_head;
-    } else {
-      new_disk = data->disks_head;
-      while (new_disk->next != NULL) {
-        new_disk = new_disk->next;
-      }
-      new_disk->next = malloc(sizeof(struct Disk));
-      new_disk->next->next = NULL;
-      new_disk = new_disk->next;
-    }
-    new_disk->path = malloc((strlen(buf) + 1) * sizeof(char));
-    strcpy(new_disk->path, buf);
-    new_disk->total = 0;
-    new_disk->used = 0;
-  }
-  mg_printf(nc, "%s",
-            "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
-            "*\r\nTransfer-Encoding: chunked\r\n\r\n");
-  mg_send_http_chunk(nc, "", 0);
-}
-
 void handle_setup(struct mg_connection *nc, struct http_message *hm) {
   pthread_mutex_lock(&lock);
   struct Data *data = get_data();
@@ -752,8 +722,6 @@ static void ev_handler(struct mg_connection *nc, int ev, void *ev_data) {
         handle_message(nc, hm);
       else if (mg_vcmp(&hm->uri, "/out") == 0)
         handle_out(nc, hm);
-      else if (mg_vcmp(&hm->uri, "/df") == 0)
-        handle_df(nc, hm);
       else if (mg_vcmp(&hm->uri, "/setup") == 0)
         handle_setup(nc, hm);
       else if (mg_vcmp(&hm->uri, "/reset") == 0)

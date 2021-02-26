@@ -4,6 +4,7 @@
 #include <dirent.h>
 #include <linux/ethtool.h>
 #include <linux/sockios.h>
+#include <mntent.h>
 #include <net/if.h>
 #include <netinet/in.h>
 #include <stdio.h>
@@ -112,6 +113,36 @@ void prepare_data(struct Data *data) {
   }
 
   data->disks_head = NULL;
+  FILE *mount_table;
+  mount_table = setmntent("/proc/mounts", "r");
+  struct mntent *e;
+  while ((e = getmntent(mount_table)) != NULL) {
+    struct statvfs s;
+
+    // Фильтрация:
+    if (statvfs(e->mnt_dir, &s) != 0) continue;
+    if (strcmp(e->mnt_type, "squashfs") == 0) continue;
+    if (s.f_fsid == 0 && strcmp(e->mnt_fsname, "aufs") != 0) continue;
+
+    struct Disk *new_disk;
+    if (data->disks_head == NULL) {
+      data->disks_head = malloc(sizeof(struct Disk));
+      data->disks_head->next = NULL;
+      new_disk = data->disks_head;
+    } else {
+      new_disk = data->disks_head;
+      while (new_disk->next != NULL) {
+        new_disk = new_disk->next;
+      }
+      new_disk->next = malloc(sizeof(struct Disk));
+      new_disk->next->next = NULL;
+      new_disk = new_disk->next;
+    }
+    new_disk->path = malloc((strlen(e->mnt_dir) + 1) * sizeof(char));
+    strcpy(new_disk->path, e->mnt_dir);
+    new_disk->total = 0;
+    new_disk->used = 0;
+  }
 
   // Ищем имена присутствующих сетевых интерфейсов, за исключение lo.
   // https://stackoverflow.com/questions/19227781/linux-getting-all-network-interface-names
