@@ -133,7 +133,7 @@ void prepare_data(struct Data *data) {
     struct Disk *item;
     SL_SEARCH(data->disks_head, cmp_disk_id, s.f_fsid, item);
     if (!item) {
-      item = malloc(sizeof(struct Disk));
+      item = malloc(sizeof(typeof(*item)));
       item->id = s.f_fsid;
       item->total = item->used = 0;
       item->path = malloc((strlen(e->mnt_dir) + 1) * sizeof(char));
