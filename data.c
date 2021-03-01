@@ -17,6 +17,12 @@
 #include <unistd.h>
 
 #include "defines.h"
+#include "list.h"
+
+int cmp_disk_id(struct Disk *disk, unsigned long id) {
+  if (disk->id == id) return 0;
+  return 1;
+}
 
 const char *thermal_zone_type[] = {"x86_pkg_temp",      // x64
                                    "imx_thermal_zone",  // imx.6
@@ -119,29 +125,21 @@ void prepare_data(struct Data *data) {
   while ((e = getmntent(mount_table)) != NULL) {
     struct statvfs s;
 
-    // Фильтрация:
+    // Фильтрация.
     if (statvfs(e->mnt_dir, &s) != 0) continue;
     if (strcmp(e->mnt_type, "squashfs") == 0) continue;
     if (s.f_fsid == 0 && strcmp(e->mnt_fsname, "aufs") != 0) continue;
 
-    struct Disk *new_disk;
-    if (data->disks_head == NULL) {
-      data->disks_head = malloc(sizeof(struct Disk));
-      data->disks_head->next = NULL;
-      new_disk = data->disks_head;
-    } else {
-      new_disk = data->disks_head;
-      while (new_disk->next != NULL) {
-        new_disk = new_disk->next;
-      }
-      new_disk->next = malloc(sizeof(struct Disk));
-      new_disk->next->next = NULL;
-      new_disk = new_disk->next;
+    struct Disk *item;
+    SL_SEARCH(data->disks_head, cmp_disk_id, s.f_fsid, item);
+    if (!item) {
+      item = malloc(sizeof(struct Disk));
+      item->id = s.f_fsid;
+      item->total = item->used = 0;
+      item->path = malloc((strlen(e->mnt_dir) + 1) * sizeof(char));
+      strcpy(item->path, e->mnt_dir);
+      SL_APPEND(data->disks_head, item);
     }
-    new_disk->path = malloc((strlen(e->mnt_dir) + 1) * sizeof(char));
-    strcpy(new_disk->path, e->mnt_dir);
-    new_disk->total = 0;
-    new_disk->used = 0;
   }
 
   // Ищем имена присутствующих сетевых интерфейсов, за исключение lo.

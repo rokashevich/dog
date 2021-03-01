@@ -22,6 +22,7 @@
 #include "data.h"
 #include "defines.h"
 #include "helpers.h"
+#include "list.h"
 #include "logger.h"
 #include "mongoose.h"
 #include "mongoose_helper.h"
@@ -74,24 +75,25 @@ void gen_json(struct Data *data) {
   snprintf(b, s, "%u", data->ram.usage);
   p = qstrcat(p, b);
   p = qstrcat(p, "},");
+
   p = qstrcat(p, "\"disks\":[");
-  struct Disk *current_disk = data->disks_head;
-  while (current_disk != NULL) {
+  struct Disk *disk;
+  SL_FOREACH(data->disks_head, disk) {
     p = qstrcat(p, "{");
     p = qstrcat(p, "\"path\":\"");
-    p = qstrcat(p, current_disk->path);
+    p = qstrcat(p, disk->path);
     p = qstrcat(p, "\",");
     p = qstrcat(p, "\"total\":");
-    snprintf(b, s, "%lld,", current_disk->total);
+    snprintf(b, s, "%lld,", disk->total);
     p = qstrcat(p, b);
     p = qstrcat(p, "\"used\":");
-    snprintf(b, s, "%lld", current_disk->used);
+    snprintf(b, s, "%lld", disk->used);
     p = qstrcat(p, b);
     p = qstrcat(p, "}");
-    if (current_disk->next) p = qstrcat(p, ",");
-    current_disk = current_disk->next;
+    if (disk->next) p = qstrcat(p, ",");
   }
   p = qstrcat(p, "],");
+
   p = qstrcat(p, "\"net\":[");
   for (unsigned int i = 0; i < data->net_count; i++) {
     p = qstrcat(p, "{");

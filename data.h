@@ -1,5 +1,8 @@
 #ifndef DATA_H
 #define DATA_H
+#ifndef __USE_GNU
+#define __USE_GNU
+#endif
 // Структура для хранения сырых данных мониторинга:
 // worker в неё пишет, handle_status из неё читатет
 
@@ -42,6 +45,7 @@ struct Process {
 };
 
 struct Disk {
+  unsigned long id;
   char *path;
   unsigned long long total;
   unsigned long long used;
