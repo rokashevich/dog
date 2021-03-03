@@ -32,10 +32,6 @@ struct Process {
   char previous_exit_reason[256];
   char previous_exit_log[5][256];  // Для последних строк перед падением.
 
-  // Для хранения двухмерного массива параметров запуска в том виде,
-  // в котором они используются для вызова execvpe().
-  char **cmds;
-
   pid_t pid;
   unsigned int restarts_counter;
   struct Process *next;
@@ -43,6 +39,7 @@ struct Process {
   int action;
   unsigned long long rss;
 };
+int cmp_process_by_pattern(struct Process *process, const char *pattern);
 
 struct Disk {
   unsigned long id;

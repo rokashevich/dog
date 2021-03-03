@@ -131,8 +131,11 @@
 
 #define SL_FOREACH(head, node) for (node = head; node; node = node->next)
 
-#define SL_FOREACH_SAFE(head, node, tmp) \
-  for (node = head, tmp = node->next; node; node = tmp)
+#define SL_FOREACH_SAFE(head, node)           \
+  typeof(node) tmp;                           \
+  if (head)                                   \
+    for (node = head, tmp = head->next; node; \
+         node = tmp, tmp = tmp ? tmp->next : NULL)
 
 #define SL_INDEX(head, node, target) \
   do {                               \

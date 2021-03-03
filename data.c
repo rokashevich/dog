@@ -17,10 +17,16 @@
 #include <unistd.h>
 
 #include "defines.h"
+#include "helpers.h"
 #include "list.h"
 
 int cmp_disk_id(struct Disk *disk, unsigned long id) {
   if (disk->id == id) return 0;
+  return 1;
+}
+
+int cmp_process_by_pattern(struct Process *process, const char *pattern) {
+  if (match(pattern, process->cmd, 0, 0)) return 0;
   return 1;
 }
 
@@ -195,6 +201,8 @@ void prepare_data(struct Data *data) {
       }
     }
   }
+
+  data->processes_head = NULL;
   //  sleep(SLEEP);
 }
 
