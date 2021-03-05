@@ -192,187 +192,179 @@ void handle_status(struct mg_connection *nc) {
 void *process_worker(void *voidprocess) {
   struct Data *data = get_data();
 
-  int filedes[2];
-  if (pipe(filedes) == -1) {
+  int fd[2];
+  if (pipe(fd) == -1) {
     e("pipe():%s", strerror(errno));
     return NULL;
   }
 
-  // Сохраняем всю нужную инфу для запуска процесса в этом потоке, чтобы можно
-  // было рестартануть всё при падении.
-  pthread_mutex_lock(&lock);
   struct Process *process = (struct Process *)voidprocess;
   process->pid = fork();
-  int env_common_len = strlen(data->env);
-  int env_proces_len = strlen(process->env);
-  char env[env_common_len + env_proces_len + 2];
-  strcpy(env, data->env);
-  strcat(env, " ");
-  strcat(env, process->env);
-  char pwd[strlen(process->pwd) + 1];
-  strcpy(pwd, process->pwd);
-  char **cmds = string_to_string_array(process->cmd);
-  //  fprintf(stderr, "unlock in process_worker for %s\n", cmds[0]);
-  pthread_mutex_unlock(&lock);
-
+  fprintf(stderr, "new pid = %d\n", process->pid);
   while (1) {
-    if (process->pid == 0) {  // child
+    if (process->pid == 0) {  // CHILD
+      char env[strlen(data->env) + strlen(process->env) + 2];
+      sprintf(env, "%s %s", data->env, process->env);
+      char **cmds = string_to_string_array(process->cmd);
+
       prctl(PR_SET_PDEATHSIG, SIGKILL);
-      close(filedes[0]);
-      while ((dup2(filedes[1], STDOUT_FILENO) == -1) && (errno == EINTR))
+      close(fd[PIPE_READ]);
+      while ((dup2(fd[PIPE_WRITE], STDOUT_FILENO) == -1) && (errno == EINTR))
         ;
-      while ((dup2(filedes[1], STDERR_FILENO) == -1) && (errno == EINTR))
+      while ((dup2(fd[PIPE_WRITE], STDERR_FILENO) == -1) && (errno == EINTR))
         ;
-      close(filedes[1]);
-      if (strlen(pwd)) {
-        if (chdir(pwd) != 0) {
-          fprintf(stderr, "chdir(%s):%s", pwd, strerror(errno));
-          exit(EX_USAGE);
-        }
+      close(fd[PIPE_WRITE]);
+      if (strlen(process->pwd) && chdir(process->pwd) != 0) {
+        fprintf(stderr, "chdir(%s):%s", process->pwd, strerror(errno));
+        exit(1);
       }
       setup_environ_from_string(env);
       extern char **environ;
       exit(execvpe(cmds[0], cmds, environ));
     }
-    // parent
-    close(filedes[1]);
-    // fprintf(stderr, "e lock in read for %s\n", cmds[0]);
+    // PARENT
+    close(fd[PIPE_WRITE]);
+
+    pthread_mutex_lock(&lock);
+    fprintf(stderr, "pthread_mutex_lock process_worker 1\n");
+    SL_APPEND(data->processes_head, process);
+    pthread_mutex_unlock(&lock);
+    fprintf(stderr, "pthread_mutex_unlock process_worker 2\n");
+
     ssize_t nread;
     char buffer[1024];
-    fprintf(stderr, "read 1 <- %s\n", cmds[0]);
     while (1) {
-      nread = read(filedes[0], &buffer[0], sizeof(buffer));
+      nread = read(fd[PIPE_READ], &buffer[0], sizeof(buffer));
       if (nread == -1) {
-        if (errno == EINTR)
+        if (errno == EINTR) {
+          fprintf(stderr, "*** EINTR ***\n");
           continue;
-        else
+        } else
           break;
       } else if (nread == 0)
         break;
-      fprintf(stderr, "read 2 <- %s\n", cmds[0]);
       // Обновляем циклически буфер процесса в общей стркутре.
       // fprintf(stderr, "before lock in read for %s\n", cmds[0]);
-      pthread_mutex_lock(&lock);
-      const int cir_buf_siz =
-          sizeof(process->circular_buffer) / sizeof(*process->circular_buffer);
-      unsigned long buffer_right_side_size =
-          sizeof(process->circular_buffer) / sizeof(*process->circular_buffer) -
-          process->circular_buffer_pos;
-      if (nread > cir_buf_siz) {
-        memcpy(process->circular_buffer, buffer + (nread - cir_buf_siz),
-               (unsigned long)cir_buf_siz);
-        process->circular_buffer_pos = 0;
-      } else if (buffer_right_side_size >= (unsigned long)nread) {
-        // Полученный stdout/stderr влезает в правую часть буфера целиком.
-        memcpy(process->circular_buffer + process->circular_buffer_pos, buffer,
-               (unsigned long)nread);
-        process->circular_buffer_pos += (unsigned long)nread;
-      } else {  // Полученный stdout/stderr надо разбивать на две части.
-        memcpy(process->circular_buffer + process->circular_buffer_pos, buffer,
-               buffer_right_side_size);
-        process->circular_buffer_pos =
-            (unsigned long)nread - buffer_right_side_size;
-        memcpy(process->circular_buffer, buffer + buffer_right_side_size,
-               process->circular_buffer_pos);
-      }
+      // pthread_mutex_lock(&lock);
+      // const int cir_buf_siz =
+      //     sizeof(process->circular_buffer) /
+      //     sizeof(*process->circular_buffer);
+      // unsigned long buffer_right_side_size =
+      //     sizeof(process->circular_buffer) /
+      //     sizeof(*process->circular_buffer) - process->circular_buffer_pos;
+      // if (nread > cir_buf_siz) {
+      //   memcpy(process->circular_buffer, buffer + (nread - cir_buf_siz),
+      //          (unsigned long)cir_buf_siz);
+      //   process->circular_buffer_pos = 0;
+      // } else if (buffer_right_side_size >= (unsigned long)nread) {
+      //   // Полученный stdout/stderr влезает в правую часть буфера целиком.
+      //   memcpy(process->circular_buffer + process->circular_buffer_pos,
+      //   buffer,
+      //          (unsigned long)nread);
+      //   process->circular_buffer_pos += (unsigned long)nread;
+      // } else {  // Полученный stdout/stderr надо разбивать на две части.
+      //   memcpy(process->circular_buffer + process->circular_buffer_pos,
+      //   buffer,
+      //          buffer_right_side_size);
+      //   process->circular_buffer_pos =
+      //       (unsigned long)nread - buffer_right_side_size;
+      //   memcpy(process->circular_buffer, buffer + buffer_right_side_size,
+      //          process->circular_buffer_pos);
+      // }
       // fprintf(stderr, "unlock in read for %s\n", cmds[0]);
-      pthread_mutex_unlock(&lock);
+      // pthread_mutex_unlock(&lock);
     }
-    close(filedes[1]);
+    // fprintf(stderr, "DIED 1\n");
+    close(fd[PIPE_READ]);
     // Обрабатываем завершение процесса.
     pthread_mutex_lock(&lock);
+    fprintf(stderr, "pthread_mutex_lock process_worker 2\n");
     int status;
-    fprintf(stderr, "waitpid:%d\n", process->pid);
+    fprintf(stderr, "waitpid1 <-- %d\n", process->pid);
     while (waitpid(process->pid, &status, 0) == -1)
       if (errno != EINTR) e("waitpid()%s", strerror(errno));
+    fprintf(stderr, "waitpid2 <-- %d\n", process->pid);
+    // char *buf = process->previous_exit_reason;
+    // int siz = sizeof(process->previous_exit_reason) /
+    //           sizeof(*process->previous_exit_reason);
+    // if (WIFEXITED(status)) {
+    //   snprintf(buf, siz, "Exit code %d", WEXITSTATUS(status));
+    // } else if (WIFSTOPPED(status)) {
+    //   snprintf(buf, siz, "Child stopped by signal %d (%s)", WSTOPSIG(status),
+    //            strsignal(WSTOPSIG(status)));
+    // } else if (WIFSIGNALED(status)) {
+    //   snprintf(buf, siz, "Child killed by signal %d (%s)", WTERMSIG(status),
+    //            strsignal(WTERMSIG(status)));
+    // } else
+    //   snprintf(buf, siz, "Exit reason unknown!");
 
-    char *buf = process->previous_exit_reason;
-    int siz = sizeof(process->previous_exit_reason) /
-              sizeof(*process->previous_exit_reason);
-    if (WIFEXITED(status)) {
-      snprintf(buf, siz, "Exit code %d", WEXITSTATUS(status));
-    } else if (WIFSTOPPED(status)) {
-      snprintf(buf, siz, "Child stopped by signal %d (%s)", WSTOPSIG(status),
-               strsignal(WSTOPSIG(status)));
-    } else if (WIFSIGNALED(status)) {
-      snprintf(buf, siz, "Child killed by signal %d (%s)", WTERMSIG(status),
-               strsignal(WTERMSIG(status)));
-    } else
-      snprintf(buf, siz, "Exit reason unknown!");
-
-    o("quit %d│%s│%s", process->restarts_counter, buf, process->cmd);
-    const int lines = sizeof(process->previous_exit_log) /
-                      sizeof(**process->previous_exit_log) /
-                      sizeof(*process->previous_exit_log);
-    for (int i = 0; i < lines; ++i) {
-      const char *line = process->previous_exit_log[i];
-      if (strlen(line)) m("│%s\n", line);
-    }
+    // o("quit %d│%s│%s", process->restarts_counter, buf, process->cmd);
+    // const int lines = sizeof(process->previous_exit_log) /
+    //                   sizeof(**process->previous_exit_log) /
+    //                   sizeof(*process->previous_exit_log);
+    // for (int i = 0; i < lines; ++i) {
+    //   const char *line = process->previous_exit_log[i];
+    //   if (strlen(line)) m("│%s\n", line);
+    // }
     pthread_mutex_unlock(&lock);
+    fprintf(stderr, "pthread_mutex_unlock process_worker 2\n");
 
     // Решаем, что делать с процессом дальше.
     if (process->action == ACTION_KILL) {
-      fprintf(stderr, "ACTION_KILL\n");
       pthread_mutex_lock(&lock);
-      struct Process *node;
-      SL_FOREACH_SAFE(data->processes_head, node) {
-        if (node == process) {
-          SL_DELETE(data->processes_head, node);
-          free(node);
-        }
-      }
+      fprintf(stderr, "pthread_mutex_lock process_worker 3\n");
+      SL_DELETE(data->processes_head, process);
+      free(process);
+
       pthread_mutex_unlock(&lock);
+      fprintf(stderr, "pthread_mutex_unlock process_worker 3\n");
       break;
     } else if (process->action == ACTION_PAUSE) {
-      fprintf(stderr, "ACTION_PAUSE\n");
       pthread_mutex_lock(&lock);
+      fprintf(stderr, "pthread_mutex_lock process_worker 4\n");
       process->pid = -1;
       process->restarts_counter = 0;
       pthread_mutex_unlock(&lock);
+      fprintf(stderr, "pthread_mutex_unlock process_worker 4\n");
       break;
     } else {
       // Процесс завершился самопроизвольно - перезапускаем!
 
       // Сохраняем из буффера перехваченных stdout/stderr последние n строк
       // в буффер хранения окончания вывода погибшего процесса.
-      pthread_mutex_lock(&lock);
-      const int src_siz =
-          sizeof(process->circular_buffer) / sizeof(*process->circular_buffer);
-      const int lines = sizeof(process->previous_exit_log) /
-                        sizeof(**process->previous_exit_log) /
-                        sizeof(*process->previous_exit_log);
-      const int width = sizeof(*process->previous_exit_log);
-      cirbuf_copy_lines(process->circular_buffer, src_siz,
-                        process->circular_buffer_pos,
-                        process->previous_exit_log, lines, width);
-      cirbuf_clear(process->circular_buffer, src_siz,
-                   &process->circular_buffer_pos);
-      pthread_mutex_lock(&lock);
+      // pthread_mutex_lock(&lock);
+      // const int src_siz =
+      //     sizeof(process->circular_buffer) /
+      //     sizeof(*process->circular_buffer);
+      // const int lines = sizeof(process->previous_exit_log) /
+      //                   sizeof(**process->previous_exit_log) /
+      //                   sizeof(*process->previous_exit_log);
+      // const int width = sizeof(*process->previous_exit_log);
+      // cirbuf_copy_lines(process->circular_buffer, src_siz,
+      //                   process->circular_buffer_pos,
+      //                   process->previous_exit_log, lines, width);
+      // cirbuf_clear(process->circular_buffer, src_siz,
+      //              &process->circular_buffer_pos);
+      // pthread_mutex_unlock(&lock);
       sleep(2);
-      if (pipe(filedes) == -1) {
+      if (pipe(fd) == -1) {
         e("pipe():%s", strerror(errno));
         return NULL;
       }
       pthread_mutex_lock(&lock);
+      fprintf(stderr, "pthread_mutex_lock process_worker 5\n");
       process->restarts_counter++;
       process->pid = fork();
       pthread_mutex_unlock(&lock);
+      fprintf(stderr, "pthread_mutex_unlock process_worker 5\n");
     }
   }
-
-  // Очищаем маллоки этого потока.
-  free_string_array(cmds);
-
   return voidprocess;
 }
 
 void handle_watch(struct mg_connection *nc, struct http_message *hm) {
-  pthread_mutex_lock(&lock);
-  struct Data *data = get_data();
-
+  // Эту функцию можно дёргать асинхронно!
   struct Process *new_process = malloc(sizeof(struct Process));
-  SL_APPEND(data->processes_head, new_process);
-
   new_process->action = ACTION_NONE;
 
   // Счётчик последнего выданного id.
@@ -425,7 +417,6 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
             "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
             "*\r\nTransfer-Encoding: chunked\r\n\r\n");
   mg_send_http_chunk(nc, "", 0);
-  pthread_mutex_unlock(&lock);
 }
 
 void handle_toggle(struct mg_connection *nc, struct http_message *hm) {
@@ -438,6 +429,7 @@ void handle_toggle(struct mg_connection *nc, struct http_message *hm) {
     SL_SEARCH(data->processes_head, cmp_process_by_pattern, pattern, process);
     if (process) {
       if (process->pid > 0) {
+        fprintf(stderr, "killing %d\n", process->pid);
         process->action = ACTION_PAUSE;
         kill(process->pid, SIGKILL);
       } else {
@@ -591,8 +583,8 @@ void handle_setup(struct mg_connection *nc, struct http_message *hm) {
 }
 
 void handle_reset(struct mg_connection *nc, struct http_message *hm) {
-  fprintf(stderr, "1\n");
   pthread_mutex_lock(&lock);
+  fprintf(stderr, "pthread_mutex_lock reset\n");
   struct Data *data = get_data();
 
   // Очистка всех df.
@@ -606,19 +598,16 @@ void handle_reset(struct mg_connection *nc, struct http_message *hm) {
 
   // Отстрел всех процессов.
   struct Process *process;
-  fprintf(stderr, "2\n");
-  SL_FOREACH_SAFE(data->processes_head, process) {
+  SL_FOREACH(data->processes_head, process) {
     // fprintf(stderr, "3:%d\n", process->pid);
     if (process->pid == -1) {  //корректно завершён
-      SL_DELETE(data->processes_head, process);
-      free(process);
+      fprintf(stderr, "PAUSE NOT KILL KEEP\n");
     } else {
       process->action = ACTION_KILL;
       fprintf(stderr, "kill -> %d\n", process->pid);
       kill(process->pid, SIGKILL);
     }
   }
-  fprintf(stderr, "4\n");
 
   // Очищаем сообщения.
   struct Msg *prev_msg = NULL;
@@ -644,6 +633,7 @@ void handle_reset(struct mg_connection *nc, struct http_message *hm) {
             "*\r\nTransfer-Encoding: chunked\r\n\r\n");
   mg_send_http_chunk(nc, "", 0);
   pthread_mutex_unlock(&lock);
+  fprintf(stderr, "pthread_mutex_unlock reset\n");
 }
 
 static const char *s_http_port = "14157";
@@ -705,9 +695,11 @@ void *worker() {
   struct Data *data = get_data();
   while (1) {
     pthread_mutex_lock(&lock);
+    fprintf(stderr, "pthread_mutex_lock get_data\n");
     update_data(data);
     gen_json(data);
     pthread_mutex_unlock(&lock);
+    fprintf(stderr, "pthread_mutex_unlock get_data\n");
     sleep(SLEEP);
   }
 }
