@@ -230,17 +230,19 @@ void *process_worker(void *voidprocess) {
     ssize_t nread;
     char buffer[1024];
     close(fd[PIPE_WRITE]);
+    fcntl(fd[PIPE_READ], F_SETFL, O_NONBLOCK);
     while (1) {
       nread = read(fd[PIPE_READ], &buffer[0], sizeof(buffer));
       if (nread == -1) {
-        if (errno == EINTR) {
-          fprintf(stderr, "*** EINTR ***\n");
+        if (errno == EINTR)
           continue;
-        } else
+        else
           break;
       } else if (nread == 0)
         break;
+
       // Обновляем циклически буфер процесса в общей стркутре.
+      pthread_mutex_lock(&lock);
       const int cir_buf_siz =
           sizeof(process->circular_buffer) / sizeof(*process->circular_buffer);
       unsigned long buffer_right_side_size =
@@ -263,6 +265,7 @@ void *process_worker(void *voidprocess) {
         memcpy(process->circular_buffer, buffer + buffer_right_side_size,
                process->circular_buffer_pos);
       }
+      pthread_mutex_unlock(&lock);
     }
     close(fd[PIPE_READ]);
 
