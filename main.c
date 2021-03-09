@@ -435,49 +435,25 @@ void handle_message(struct mg_connection *nc, struct http_message *hm) {
   struct Data *data = get_data();
   pthread_mutex_lock(&lock);
   char buf[1024];
+
   if (mg_get_http_var(&hm->body, "del", buf, sizeof(buf)) > 0) {
-    struct Msg *prev_msg = NULL;
-    struct Msg *current_msg = data->msgs_head;
-    while (current_msg != NULL) {
-      if (match(buf, current_msg->msg, 0, 0)) {
-        if (data->msgs_head ==
-            current_msg) {  // If node to be deleted is head node.
-          data->msgs_head = current_msg->next;
-          current_msg->next = NULL;
-          free(current_msg->msg);
-          free(current_msg);
-          current_msg = data->msgs_head;
-        } else if (prev_msg != NULL) {
-          prev_msg->next = current_msg->next;
-          current_msg->next = NULL;
-          free(current_msg->msg);
-          free(current_msg);
-          current_msg = prev_msg->next;
-        }
-      } else {
-        prev_msg = current_msg;
-        current_msg = current_msg->next;
+    struct Msg *msg;
+    SL_FOREACH_SAFE(data->msgs_head, msg) {
+      if (match(buf, msg->msg, 0, 0)) {
+        SL_DELETE(data->msgs_head, msg);
+        free(msg->msg);
+        free(msg);
       }
     }
   }
+
   if (mg_get_http_var(&hm->body, "add", buf, sizeof(buf)) > 0) {
-    struct Msg *new_msg;
-    if (data->msgs_head == NULL) {
-      data->msgs_head = malloc(sizeof(struct Process));
-      data->msgs_head->next = NULL;
-      new_msg = data->msgs_head;
-    } else {
-      new_msg = data->msgs_head;
-      while (new_msg->next != NULL) {
-        new_msg = new_msg->next;
-      }
-      new_msg->next = malloc(sizeof(struct Process));
-      new_msg->next->next = NULL;
-      new_msg = new_msg->next;
-    }
-    new_msg->msg = malloc((strlen(buf) + 1) * sizeof(char));
-    strcpy(new_msg->msg, buf);
+    struct Msg *msg = malloc(sizeof(struct Process));
+    msg->msg = malloc((strlen(buf) + 1) * sizeof(char));
+    strcpy(msg->msg, buf);
+    SL_APPEND(data->msgs_head, msg);
   }
+
   mg_printf(nc, "%s",
             "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
             "*\r\nTransfer-Encoding: chunked\r\n\r\n");
