@@ -35,9 +35,16 @@ void gen_json(struct Data *data) {
   char *p = data->json;
   data->json[0] = '\0';
   p = qstrcat(p, "{");
+
   p = qstrcat(p, "\"hostname\":\"");
   p = qstrcat(p, data->hostname);
-  p = qstrcat(p, "\",\"timestamp\":");
+  p = qstrcat(p, "\",");
+
+  p = qstrcat(p, "\"env\":\"");
+  p = qstrcat(p, data->env);
+  p = qstrcat(p, "\",");
+
+  p = qstrcat(p, "\"timestamp\":");
   p = qstrcat(p, data->timestamp);
   p = qstrcat(p, ",\"boot_id\":\"");
   p = qstrcat(p, data->boot_id);
