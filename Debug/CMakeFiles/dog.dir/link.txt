@@ -1,0 +1,1 @@
+/usr/bin/cc -std=gnu11 -g  -rdynamic CMakeFiles/dog.dir/data.c.o CMakeFiles/dog.dir/helpers.c.o CMakeFiles/dog.dir/logger.c.o CMakeFiles/dog.dir/main.c.o CMakeFiles/dog.dir/mongoose.c.o CMakeFiles/dog.dir/mongoose_helper.c.o  -o dog  -lpthread -lrt 

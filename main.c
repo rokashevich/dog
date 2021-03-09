@@ -412,7 +412,6 @@ void handle_toggle(struct mg_connection *nc, struct http_message *hm) {
     SL_SEARCH(data->processes_head, cmp_process_by_pattern, pattern, process);
     if (process) {
       if (process->pid > 0) {
-        fprintf(stderr, "killing %d\n", process->pid);
         process->action = ACTION_PAUSE;
         kill(process->pid, SIGKILL);
       } else {
@@ -557,12 +556,8 @@ void handle_reset(struct mg_connection *nc, struct http_message *hm) {
   // Отстрел всех процессов.
   struct Process *process;
   SL_FOREACH(data->processes_head, process) {
-    // fprintf(stderr, "3:%d\n", process->pid);
-    if (process->pid == -1) {  //корректно завершён
-      fprintf(stderr, "PAUSE NOT KILL KEEP\n");
-    } else if (process->pid > 0) {
+    if (process->pid > 0) {
       process->action = ACTION_KILL;
-      // fprintf(stderr, "kill -> %d\n", process->pid);
       kill(process->pid, SIGKILL);
     }
   }
