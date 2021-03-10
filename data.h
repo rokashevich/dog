@@ -6,6 +6,7 @@
 // Структура для хранения сырых данных мониторинга:
 // worker в неё пишет, handle_status из неё читатет
 
+#include <limits.h>
 #include <time.h>
 
 #include "defines.h"
@@ -54,6 +55,7 @@ struct Data {
   struct Msg *msgs_head;
 
   char env[4096];  // должно хватить :)
+  char pwd[PATH_MAX];
   char version[32];
   char hostname[64];
   char boot_id[37];    // /proc/sys/kernel/random/boot_id >

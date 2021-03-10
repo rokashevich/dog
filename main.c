@@ -44,6 +44,10 @@ void gen_json(struct Data *data) {
   p = qstrcat(p, data->env);
   p = qstrcat(p, "\",");
 
+  p = qstrcat(p, "\"pwd\":\"");
+  p = qstrcat(p, data->pwd);
+  p = qstrcat(p, "\",");
+
   p = qstrcat(p, "\"timestamp\":");
   p = qstrcat(p, data->timestamp);
   p = qstrcat(p, ",\"boot_id\":\"");
@@ -200,7 +204,7 @@ void *process_worker(void *voidprocess) {
   struct Data *data = get_data();
 
   int fd[2];
-  if (pipe(fd) == -1) {
+  if (pipe(fd)) {
     e("pipe():%s", strerror(errno));
     return NULL;
   }
@@ -210,41 +214,63 @@ void *process_worker(void *voidprocess) {
 
   while (1) {
     if (pid == 0) {  // CHILD
-      char env[strlen(data->env) + strlen(process->env) + 2];
-      sprintf(env, "%s %s", data->env, process->env);
-      char **cmds = string_to_string_array(process->cmd);
-
       prctl(PR_SET_PDEATHSIG, SIGKILL);
+
       close(fd[PIPE_READ]);
       while ((dup2(fd[PIPE_WRITE], STDOUT_FILENO) == -1) && (errno == EINTR))
         ;
       while ((dup2(fd[PIPE_WRITE], STDERR_FILENO) == -1) && (errno == EINTR))
         ;
-      if (strlen(process->pwd) && chdir(process->pwd) != 0) {
-        fprintf(stderr, "chdir(%s):%s", process->pwd, strerror(errno));
-        exit(1);
-      }
       close(fd[PIPE_WRITE]);
-      setup_environ_from_string(env);
+
+      if (strlen(process->pwd)) {
+        if (chdir(process->pwd) != 0) {
+          fprintf(stderr, "chdir(%s):%s\n", process->pwd, strerror(errno));
+          exit(1);
+        }
+      }
+
+      // Выставляем переменные окружения.
+      if (strlen(process->env))
+        setup_environ_from_string(process->env);
+      else if (strlen(data->env))
+        setup_environ_from_string(data->env);
+
+      // Запускаем процесс.
+      char **cmds = string_to_string_array(process->cmd);
       extern char **environ;
-      exit(execvpe(cmds[0], cmds, environ));
+      execvpe(cmds[0], cmds, environ);
+      fprintf(stderr, "***********\n");
+      exit(1);
     }
     // PARENT
     pthread_mutex_lock(&lock);
     process->pid = pid;
     pthread_mutex_unlock(&lock);
 
+    int status = -1;
     ssize_t nread;
     char buffer[1024];
     close(fd[PIPE_WRITE]);
-    fcntl(fd[PIPE_READ], F_SETFL, O_NONBLOCK);
     while (1) {
+      int flags = fcntl(fd[PIPE_READ], F_GETFL, 0);
+      fcntl(fd[PIPE_READ], F_SETFL, flags | O_NONBLOCK);
       nread = read(fd[PIPE_READ], &buffer[0], sizeof(buffer));
+
       if (nread == -1) {
-        if (errno == EINTR)
+        if (errno == EINTR) {
           continue;
-        else
+        } else if (errno == EAGAIN) {
+          if (waitpid(process->pid, &status, WNOHANG) == 0) {
+            sleep(1);
+            continue;
+          } else {
+            break;
+          }
+        } else {
           break;
+        }
+
       } else if (nread == 0)
         break;
 
@@ -277,9 +303,9 @@ void *process_worker(void *voidprocess) {
     close(fd[PIPE_READ]);
 
     // Обрабатываем завершение процесса.
-    int status;
-    while (waitpid(pid, &status, 0) == -1)
-      if (errno != EINTR) e("waitpid()%s", strerror(errno));
+    if (status == -1)
+      while (waitpid(pid, &status, 0) == -1)
+        if (errno != EINTR) e("waitpid()%s", strerror(errno));
     pthread_mutex_lock(&lock);
     int siz = sizeof(process->previous_exit_reason) /
               sizeof(*process->previous_exit_reason);
@@ -533,6 +559,8 @@ void handle_setup(struct mg_connection *nc, struct http_message *hm) {
   struct Data *data = get_data();
   mg_get_http_var(&hm->body, "env", data->env,
                   sizeof data->env / sizeof *data->env);
+  mg_get_http_var(&hm->body, "pwd", data->pwd,
+                  sizeof data->env / sizeof *data->pwd);
   pthread_mutex_unlock(&lock);
   mg_printf(nc, "%s",
             "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
