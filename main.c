@@ -313,16 +313,8 @@ void *process_worker(void *voidprocess) {
       snprintf(process->previous_exit_reason, siz, "Exit reason unknown!");
     o("quit %d│%s│%s", process->restarts_counter, process->previous_exit_reason,
       process->cmd);
-    const int lines = sizeof(process->previous_exit_log) /
-                      sizeof(**process->previous_exit_log) /
-                      sizeof(*process->previous_exit_log);
-    for (int i = 0; i < lines; ++i) {
-      const char *line = process->previous_exit_log[i];
-      if (strlen(line)) m("│%s\n", line);
-    }
 
     // Решаем, что делать с процессом дальше.
-
     if (process->action == ACTION_KILL) {
       SL_DELETE(data->processes_head, process);
       free(process);
@@ -337,6 +329,9 @@ void *process_worker(void *voidprocess) {
     // Процесс завершился самопроизвольно - перезапускаем!
     // Сохраняем из буффера перехваченных stdout/stderr последние n строк
     // в буффер хранения окончания вывода погибшего процесса.
+    const int lines = sizeof(process->previous_exit_log) /
+                      sizeof(**process->previous_exit_log) /
+                      sizeof(*process->previous_exit_log);
     const int src_siz =
         sizeof(process->circular_buffer) / sizeof(*process->circular_buffer);
     const int width = sizeof(*process->previous_exit_log);
@@ -345,6 +340,10 @@ void *process_worker(void *voidprocess) {
                       lines, width);
     cirbuf_clear(process->circular_buffer, src_siz,
                  &process->circular_buffer_pos);
+    for (int i = 0; i < lines; ++i) {
+      const char *line = process->previous_exit_log[i];
+      if (strlen(line)) m("│%s\n", line);
+    }
     process->restarts_counter++;
 
     if (pipe(fd) == -1) {
