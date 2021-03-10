@@ -248,6 +248,7 @@ void *process_worker(void *voidprocess) {
     process->pid = pid;
     pthread_mutex_unlock(&lock);
 
+    // В бесконечном цикле читаем неблокирующим способом пайп чилда.
     int status = -1;
     ssize_t nread;
     char buffer[1024];
@@ -256,23 +257,14 @@ void *process_worker(void *voidprocess) {
       int flags = fcntl(fd[PIPE_READ], F_GETFL, 0);
       fcntl(fd[PIPE_READ], F_SETFL, flags | O_NONBLOCK);
       nread = read(fd[PIPE_READ], &buffer[0], sizeof(buffer));
-
-      if (nread == -1) {
-        if (errno == EINTR) {
+      if (nread <= 0) {
+        if (waitpid(process->pid, &status, WNOHANG) > 0) {
+          break;  // Процесс завершился.
+        } else {  // Процесс еще работает.
+          sleep(1);
           continue;
-        } else if (errno == EAGAIN) {
-          if (waitpid(process->pid, &status, WNOHANG) == 0) {
-            sleep(1);
-            continue;
-          } else {
-            break;
-          }
-        } else {
-          break;
         }
-
-      } else if (nread == 0)
-        break;
+      }
 
       // Обновляем циклически буфер процесса в общей стркутре.
       pthread_mutex_lock(&lock);
@@ -303,9 +295,6 @@ void *process_worker(void *voidprocess) {
     close(fd[PIPE_READ]);
 
     // Обрабатываем завершение процесса.
-    if (status == -1)
-      while (waitpid(pid, &status, 0) == -1)
-        if (errno != EINTR) e("waitpid()%s", strerror(errno));
     pthread_mutex_lock(&lock);
     int siz = sizeof(process->previous_exit_reason) /
               sizeof(*process->previous_exit_reason);
