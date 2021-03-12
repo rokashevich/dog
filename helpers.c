@@ -245,10 +245,8 @@ void setup_environ_from_string(const char* s) {
   int max_siz = strlen(s);
   char name[max_siz];
   char val[max_siz];
-  char exp[max_siz];
   memset(name, 0, sizeof name / sizeof *name);
   memset(val, 0, sizeof val / sizeof *val);
-  memset(exp, 0, sizeof exp / sizeof *exp);
   bool is_name = true;
   unsigned long pos = 0;
   do {
@@ -257,32 +255,13 @@ void setup_environ_from_string(const char* s) {
       name[strlen(name)] = c;
     } else if (c == '=') {
       is_name = false;
-    } else if (!is_name && (c != ' ' && c != 0)) {
+    } else if (!is_name && (c != ' ' && c != 0)) {  // Продвигаемся по val.
       val[strlen(val)] = c;
-    } else if (!is_name && (c == ' ' || c == 0)) {
-      // В val у нас значение переменной name.
-      // В нём надо раскрыть переменные, если есть.
-      char* begin = val;
-      char* end = begin;
-      while ((begin = strchr(begin, '$'))) {
-        if (begin > end) strncat(exp, end, begin - end);
-        end = strchr(begin, ':');
-        if (!end) end = strchr(begin, ' ');
-        if (!end) end = strchr(begin, 0);
-        char var[end - begin];
-        strncpy(var, begin, end - begin);
-        char* got = getenv(var + 1);
-        if (got) {
-          strcat(exp, got);
-        }
-        begin = end;
-      }
-      strcat(exp, end);
-      setenv(name, exp, 1);
+    } else if (!is_name && (c == ' ' || c == 0)) {  // Дошли до конца val.
+      setenv(name, val, 1);
       is_name = true;
       memset(name, 0, sizeof name / sizeof *name);
       memset(val, 0, sizeof val / sizeof *val);
-      memset(exp, 0, sizeof exp / sizeof *exp);
     }
-  } while (++pos < strlen(s));
+  } while (++pos < strlen(s) + 1);
 }

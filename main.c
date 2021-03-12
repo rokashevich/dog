@@ -223,11 +223,14 @@ void *process_worker(void *voidprocess) {
         ;
       close(fd[PIPE_WRITE]);
 
-      if (strlen(process->pwd)) {
-        if (chdir(process->pwd) != 0) {
-          fprintf(stderr, "chdir(%s):%s\n", process->pwd, strerror(errno));
-          exit(1);
-        }
+      char *pwd = NULL;
+      if (strlen(data->pwd))
+        pwd = data->pwd;
+      else if (strlen(process->pwd))
+        pwd = process->pwd;
+      if (pwd && chdir(pwd)) {
+        fprintf(stderr, "chdir(%s):%s\n", process->pwd, strerror(errno));
+        exit(1);
       }
 
       // Выставляем переменные окружения.
@@ -240,7 +243,6 @@ void *process_worker(void *voidprocess) {
       char **cmds = string_to_string_array(process->cmd);
       extern char **environ;
       execvpe(cmds[0], cmds, environ);
-      fprintf(stderr, "***********\n");
       exit(1);
     }
     // PARENT
@@ -419,11 +421,11 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
 void handle_toggle(struct mg_connection *nc, struct http_message *hm) {
   pthread_mutex_lock(&lock);
   struct Data *data = get_data();
-  char pattern[128];
-  if (mg_get_query_string_var(&hm->query_string, "pattern", pattern,
-                              sizeof(pattern)) > 0) {
+  char cmd[128];
+  mg_get_http_var(&hm->body, "cmd", cmd, sizeof(cmd));
+  if (strlen(cmd) > 0) {
     struct Process *process;
-    SL_SEARCH(data->processes_head, cmp_process_by_pattern, pattern, process);
+    SL_SEARCH(data->processes_head, cmp_process_by_pattern, cmd, process);
     if (process) {
       if (process->pid > 0) {
         process->action = ACTION_PAUSE;
