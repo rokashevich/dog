@@ -40,7 +40,6 @@ struct Process {
   int action;
   unsigned long long rss;
 };
-int cmp_process_by_pattern(struct Process *process, const char *pattern);
 
 struct Disk {
   unsigned long id;

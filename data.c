@@ -25,11 +25,6 @@ int cmp_disk_id(struct Disk *disk, unsigned long id) {
   return 1;
 }
 
-int cmp_process_by_pattern(struct Process *process, const char *pattern) {
-  if (match(pattern, process->cmd, 0, 0)) return 0;
-  return 1;
-}
-
 const char *thermal_zone_type[] = {"x86_pkg_temp",      // x64
                                    "imx_thermal_zone",  // imx.6
                                    NULL};

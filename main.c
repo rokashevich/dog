@@ -323,7 +323,7 @@ void *process_worker(void *voidprocess) {
       pthread_mutex_unlock(&lock);
       break;
     } else if (process->action == ACTION_PAUSE) {
-      process->pid = -1;
+      process->pid = 0;
       process->restarts_counter = 0;
       pthread_mutex_unlock(&lock);
       break;
@@ -425,17 +425,18 @@ void handle_toggle(struct mg_connection *nc, struct http_message *hm) {
   mg_get_http_var(&hm->body, "cmd", cmd, sizeof(cmd));
   if (strlen(cmd) > 0) {
     struct Process *process;
-    SL_SEARCH(data->processes_head, cmp_process_by_pattern, cmd, process);
-    if (process) {
-      if (process->pid > 0) {
-        process->action = ACTION_PAUSE;
-        kill(process->pid, SIGKILL);
-      } else {
-        process->action = ACTION_NONE;
-        pthread_t t;
-        if (pthread_create(&t, NULL, &process_worker, process) != 0)
-          e("resume");
-        pthread_detach(t);
+    SL_FOREACH(data->processes_head, process) {
+      if (match(cmd, process->cmd, 0, 0)) {
+        if (process->pid > 0) {
+          process->action = ACTION_PAUSE;
+          kill(process->pid, SIGKILL);
+        } else {
+          process->action = ACTION_NONE;
+          pthread_t t;
+          if (pthread_create(&t, NULL, &process_worker, process) != 0)
+            e("resume");
+          pthread_detach(t);
+        }
       }
     }
   }
@@ -573,10 +574,13 @@ void handle_reset(struct mg_connection *nc, struct http_message *hm) {
 
   // Отстрел всех процессов.
   struct Process *process;
-  SL_FOREACH(data->processes_head, process) {
+  SL_FOREACH_SAFE(data->processes_head, process) {
     if (process->pid > 0) {
       process->action = ACTION_KILL;
       kill(process->pid, SIGKILL);
+    } else {
+      SL_DELETE(data->processes_head, process);
+      free(process);
     }
   }
 
