@@ -1,3 +1,0 @@
-/home/st/dog/Debug/CMakeFiles/rebuild_cache.dir
-/home/st/dog/Debug/CMakeFiles/edit_cache.dir
-/home/st/dog/Debug/CMakeFiles/dog.dir
