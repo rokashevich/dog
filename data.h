@@ -42,8 +42,9 @@ struct Process {
 };
 
 struct Disk {
-  unsigned long id;
   char *path;
+  char *name;
+  char *type;
   unsigned long long total;
   unsigned long long used;
   struct Disk *next;

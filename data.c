@@ -20,11 +20,6 @@
 #include "helpers.h"
 #include "list.h"
 
-int cmp_disk_id(struct Disk *disk, unsigned long id) {
-  if (disk->id == id) return 0;
-  return 1;
-}
-
 const char *thermal_zone_type[] = {"x86_pkg_temp",      // x64
                                    "imx_thermal_zone",  // imx.6
                                    NULL};
@@ -125,22 +120,41 @@ void prepare_data(struct Data *data) {
   struct mntent *e;
   while ((e = getmntent(mount_table)) != NULL) {
     struct statvfs s;
+    struct Disk *disk;
 
     // Фильтрация.
-    if (statvfs(e->mnt_dir, &s) != 0) continue;
-    if (strcmp(e->mnt_type, "squashfs") == 0) continue;
-    if (s.f_fsid == 0 && strcmp(e->mnt_fsname, "aufs") != 0) continue;
+    // Будем мониторить только следующие диски:
+    if (!(strcmp(e->mnt_type, "aufs") == 0 ||    // ramdisk
+          strcmp(e->mnt_type, "ext4") == 0 ||    // обычный
+          strcmp(e->mnt_type, "fuseblk") == 0))  // ntfs, например
+      continue;
 
-    struct Disk *item;
-    SL_SEARCH(data->disks_head, cmp_disk_id, s.f_fsid, item);
-    if (!item) {
-      item = malloc(sizeof(typeof(*item)));
-      item->id = s.f_fsid;
-      item->total = item->used = 0;
-      item->path = malloc((strlen(e->mnt_dir) + 1) * sizeof(char));
-      strcpy(item->path, e->mnt_dir);
-      SL_APPEND(data->disks_head, item);
+    // Поиск дубликатов.
+    // Возможна ситуация, что диск был подмонтирован дважды: по-обычному и
+    // через mount -o bind - в этом случае устройство (mnt_fsname, например
+    // /dev/sda1) будет одно и то же, а точка монтирования разная. В этом
+    // случае будем мониторить диск с более короткой точкой монтирования.
+    int duplicate = 0;
+    SL_FOREACH(data->disks_head, disk) {
+      if (strcmp(disk->name, e->mnt_fsname) == 0) {
+        duplicate = 1;
+        if (strlen(e->mnt_fsname) < strlen(disk->name)) {
+          strcpy(disk->name, e->mnt_fsname);
+        }
+      }
     }
+    if (duplicate == 1) continue;
+
+    // Найден новый диск для мониторинга!
+    disk = malloc(sizeof(typeof(*disk)));
+    disk->path = malloc((strlen(e->mnt_dir) + 1) * sizeof(char));
+    disk->name = malloc((strlen(e->mnt_fsname) + 1) * sizeof(char));
+    disk->type = malloc((strlen(e->mnt_type) + 1) * sizeof(char));
+    strcpy(disk->path, e->mnt_dir);
+    strcpy(disk->name, e->mnt_fsname);
+    strcpy(disk->type, e->mnt_type);
+    disk->total = disk->used = 0;
+    SL_APPEND(data->disks_head, disk);
   }
 
   // Ищем имена присутствующих сетевых интерфейсов, за исключение lo.

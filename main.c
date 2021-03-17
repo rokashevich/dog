@@ -94,6 +94,12 @@ void gen_json(struct Data *data) {
     p = qstrcat(p, "\"path\":\"");
     p = qstrcat(p, disk->path);
     p = qstrcat(p, "\",");
+    p = qstrcat(p, "\"name\":\"");
+    p = qstrcat(p, disk->name);
+    p = qstrcat(p, "\",");
+    p = qstrcat(p, "\"type\":\"");
+    p = qstrcat(p, disk->type);
+    p = qstrcat(p, "\",");
     p = qstrcat(p, "\"total\":");
     snprintf(b, s, "%lld,", disk->total);
     p = qstrcat(p, b);
