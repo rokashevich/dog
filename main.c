@@ -569,15 +569,6 @@ void handle_reset(struct mg_connection *nc, struct http_message *hm) {
   pthread_mutex_lock(&lock);
   struct Data *data = get_data();
 
-  // Очистка всех df.
-  while (data->disks_head != NULL) {
-    struct Disk *delete_disk = data->disks_head;
-    // o("reset df %s", delete_disk->path);
-    data->disks_head = data->disks_head->next;
-    free(delete_disk->path);
-    free(delete_disk);
-  }
-
   // Отстрел всех процессов.
   struct Process *process;
   SL_FOREACH_SAFE(data->processes_head, process) {
