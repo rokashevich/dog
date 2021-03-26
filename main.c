@@ -529,20 +529,25 @@ void handle_out(struct mg_connection *nc, struct http_message *hm) {
         }
 
         strcat(buf, "\n>>> current stdout/stderr:\n");
+        int max_newlines = 40;
         unsigned long length = strlen(buf);
         for (unsigned long i = current_process->circular_buffer_pos; i < siz;
              ++i, ++length) {
           char c = current_process->circular_buffer[i];
           if (c == '\0') break;
+          if (c == '\n') --max_newlines;
+          if (max_newlines == 0) break;
           buf[length] = c;
         }
         for (unsigned long i = 0; i < current_process->circular_buffer_pos;
              ++i, ++length) {
           char c = current_process->circular_buffer[i];
+          if (c == '\n') --max_newlines;
+          if (max_newlines == 0) break;
           buf[length] = c;
         }
         buf[length] = '\0';
-        mg_printf_http_chunk(nc, buf);
+        mg_printf_http_chunk(nc, strip_ansi_escape_codes(buf));
         break;
       }
       current_process = current_process->next;

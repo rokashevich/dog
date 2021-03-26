@@ -265,3 +265,21 @@ void setup_environ_from_string(const char* s) {
     }
   } while (++pos < strlen(s) + 1);
 }
+
+char* strip_ansi_escape_codes(char* s) {
+  int j = 0;
+  for (int i = 0, inside = 0; s[i]; ++i) {
+    if (s[i] == '\033') {
+      inside = 1;
+    }
+    s[j] = s[i];
+    if (!inside) {
+      ++j;
+    }
+    if (s[i] == 'm') {
+      inside = 0;
+    }
+  }
+  s[j] = 0;
+  return s;
+}
