@@ -31,7 +31,7 @@ struct Process {
   char circular_buffer[4096];  // Для stdout + stderr.
   unsigned long circular_buffer_pos;
   char previous_exit_reason[512];
-  char previous_exit_log[4][512];  // Для последних строк перед падением.
+  char previous_exit_log[10][200];  // Для последних строк перед падением.
 
   pid_t pid;
   unsigned int restarts_counter;
