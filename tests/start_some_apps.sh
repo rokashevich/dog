@@ -1,5 +1,5 @@
 #!/bin/sh
-curl http://localhost:14157/reset
+#curl http://localhost:14157/reset
 # curl -X POST http://localhost:14157/setup -d "env=\
 # DISPLAY=$DISPLAY \
 # XAUTHORITY=$XAUTHORITY \
@@ -10,6 +10,6 @@ curl http://localhost:14157/reset
 curl -X POST http://localhost:14157/watch -d "cmd=xterm -e mc"
 #curl -X POST http://localhost:14157/watch -d "pwd=/bad&cmd=xterm"
 #curl -X POST http://localhost:14157/watch -d "pwd=`pwd`&cmd=bash generator_stdout_stderr.sh"
-curl -X POST http://localhost:14157/watch -d "pwd=`pwd`&cmd=./segfault"
-curl -X POST http://localhost:14157/watch -d "cmd=glxgears"
+#curl -X POST http://localhost:14157/watch -d "pwd=`pwd`&cmd=./segfault"
+#curl -X POST http://localhost:14157/watch -d "cmd=glxgears"
 #curl -X POST http://localhost:14157/watch -d "pwd=`pwd`&cmd=/bin/bash ./env.sh"

@@ -1,9 +1,0 @@
-{
-  "files.associations": {
-    "list.h": "c",
-    "*.tcc": "c",
-    "fstream": "c",
-    "ostream": "c"
-  },
-  "python.pythonPath": "/usr/bin/python3"
-}
