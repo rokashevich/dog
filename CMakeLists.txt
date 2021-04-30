@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1.0)
+cmake_minimum_required(VERSION 3.10)
 
 project(dog)
 
@@ -21,3 +21,10 @@ file(GLOB dog_sources
 )
 add_executable(dog ${dog_sources})
 target_link_libraries(dog -lpthread -lrt)
+
+add_executable(color "tests/color.c")
+
+add_executable(segfault "tests/segfault.c")
+
+add_executable(std "tests/std.c")
+target_link_libraries(std -lpthread -lrt)
