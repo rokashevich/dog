@@ -304,8 +304,6 @@ void *process_worker(void *voidprocess) {
                strsignal(WTERMSIG(status)));
     } else
       snprintf(process->previous_exit_reason, siz, "Exit reason unknown!");
-    w("quit %d│%s│%s", process->restarts_counter, process->previous_exit_reason,
-      process->cmd);
 
     // Решаем, что делать с процессом дальше.
     if (process->action == ACTION_KILL) {
@@ -319,8 +317,11 @@ void *process_worker(void *voidprocess) {
       pthread_mutex_unlock(&lock);
       break;
     }
+
     // Процесс завершился самопроизвольно - перезапускаем!
     process->restarts_counter++;
+    w("die %s %d %s", process->cmd, process->restarts_counter,
+      process->previous_exit_reason);
     cirbuf_takeout(process->circular_buffer, process->circular_buffer_pos,
                    process->previous_exit_log);
     cirbuf_fill(process->circular_buffer, &process->circular_buffer_pos, ' ');
@@ -335,8 +336,9 @@ void *process_worker(void *voidprocess) {
       const size_t n = strlen(p);
       char s[n];
       strcpy(s, p);
-      w("%s", strip_ansi_escape_codes(s));
       p = strtok(NULL, "\n");
+      w("die %s %d %s", process->cmd, process->restarts_counter,
+        strip_ansi_escape_codes(s));
     }
 
     if (pipe(fd) == -1) {
