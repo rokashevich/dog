@@ -5,14 +5,20 @@
 
 static void *out() {
   for (int i = 0; i < 1000000; ++i) {
-    fprintf(stdout, "o");
+    int a[8192];
+    for (int i = 0; i < 8193; ++i) a[i] = 'o';
+    a[8192] = 0;
+    fprintf(stdout, "%s", (char *)a);
   }
   return strdup("stdout finish");
 }
 
 static void *err() {
   for (int i = 0; i < 1000000; ++i) {
-    fprintf(stderr, "e");
+    int a[8192];
+    for (int i = 0; i < 8193; ++i) a[i] = 'e';
+    a[8192] = 0;
+    fprintf(stderr, "%s", (char *)a);
   }
   return strdup("stderr finish");
 }

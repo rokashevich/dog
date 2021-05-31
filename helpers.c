@@ -267,8 +267,8 @@ void setup_environ_from_string(const char* s) {
 }
 
 char* strip_ansi_escape_codes(char* s) {
-  int j = 0;
-  for (int i = 0, inside = 0; s[i]; ++i) {
+  int j = 0, inside = 0;
+  for (int i = 0; s[i] != '\0'; ++i) {
     if (s[i] == '\033') {
       inside = 1;
     }
@@ -280,6 +280,6 @@ char* strip_ansi_escape_codes(char* s) {
       inside = 0;
     }
   }
-  s[j] = 0;
+  s[j - inside] = '\0';
   return s;
 }

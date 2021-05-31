@@ -9,6 +9,7 @@
 #include <limits.h>
 #include <time.h>
 
+#include "cirbuf.h"
 #include "defines.h"
 
 enum Action {
@@ -28,10 +29,10 @@ struct Process {
   char env[1024];  // DISPLAY=$DISPLAY LD_LIBRARY_PATH=.:../lib
   char cmd[1024];  // program --arg-one 1 --arg-two 2
 
-  char circular_buffer[4096];  // Для stdout + stderr.
-  unsigned long circular_buffer_pos;
+  char circular_buffer[cirbuf_size];  // Для stdout + stderr.
+  size_t circular_buffer_pos;
   char previous_exit_reason[512];
-  char previous_exit_log[20][200];  // Для последних строк перед падением.
+  char previous_exit_log[cirbuf_size];  // Для последних строк перед падением.
 
   pid_t pid;
   unsigned int restarts_counter;

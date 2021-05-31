@@ -216,10 +216,11 @@ void *process_worker(void *voidprocess) {
   }
 
   struct Process *process = (struct Process *)voidprocess;
-  pid_t pid = fork();
+  // pid_t pid = fork();
+  process->pid = fork();
 
   while (1) {
-    if (pid == 0) {  // CHILD
+    if (process->pid == 0) {  // CHILD
       prctl(PR_SET_PDEATHSIG, SIGKILL);
 
       close(fd[PIPE_READ]);
@@ -229,13 +230,11 @@ void *process_worker(void *voidprocess) {
         ;
       close(fd[PIPE_WRITE]);
 
-      char *pwd = NULL;
-      if (strlen(data->pwd))
-        pwd = data->pwd;
-      else if (strlen(process->pwd))
-        pwd = process->pwd;
+      const char *pwd = strlen(process->pwd)
+                            ? process->pwd
+                            : (strlen(data->pwd) ? data->pwd : NULL);
       if (pwd && chdir(pwd)) {
-        fprintf(stderr, "chdir(%s):%s\n", process->pwd, strerror(errno));
+        fprintf(stderr, "bad cfg pwd %s, %s'\n", process->pwd, strerror(errno));
         exit(1);
       }
 
@@ -251,16 +250,16 @@ void *process_worker(void *voidprocess) {
       execvpe(cmds[0], cmds, environ);
       exit(1);
     }
+    close(fd[PIPE_WRITE]);
     // PARENT
-    pthread_mutex_lock(&lock);
-    process->pid = pid;
-    pthread_mutex_unlock(&lock);
+    // pthread_mutex_lock(&lock);
+    // process->pid = pid;
+    // pthread_mutex_unlock(&lock);
 
     // В бесконечном цикле читаем неблокирующим способом пайп чилда.
     int status = -1;
     ssize_t nread;
-    char buffer[1024];
-    close(fd[PIPE_WRITE]);
+    char buffer[4096];
     while (1) {
       int flags = fcntl(fd[PIPE_READ], F_GETFL, 0);
       fcntl(fd[PIPE_READ], F_SETFL, flags | O_NONBLOCK);
@@ -272,33 +271,19 @@ void *process_worker(void *voidprocess) {
           sleep(1);
           continue;
         }
+      } else {
+        // Обновляем циклически буфер процесса в общей стркутре.
+        pthread_mutex_lock(&lock);
+        // e(">>>%d\n", process->circular_buffer_pos);
+        cirbuf_push(buffer, nread, process->circular_buffer,
+                    &process->circular_buffer_pos);
+        // char b[cirbuf_size];
+        // cirbuf_takeout(process->circular_buffer,
+        // process->circular_buffer_pos,
+        //                b);
+        // e(">%s\n", b);
+        pthread_mutex_unlock(&lock);
       }
-
-      // Обновляем циклически буфер процесса в общей стркутре.
-      pthread_mutex_lock(&lock);
-      const int cir_buf_siz =
-          sizeof(process->circular_buffer) / sizeof(*process->circular_buffer);
-      unsigned long buffer_right_side_size =
-          sizeof(process->circular_buffer) / sizeof(*process->circular_buffer) -
-          process->circular_buffer_pos;
-      if (nread > cir_buf_siz) {
-        memcpy(process->circular_buffer, buffer + (nread - cir_buf_siz),
-               (unsigned long)cir_buf_siz);
-        process->circular_buffer_pos = 0;
-      } else if (buffer_right_side_size >= (unsigned long)nread) {
-        // Полученный stdout/stderr влезает в правую часть буфера целиком.
-        memcpy(process->circular_buffer + process->circular_buffer_pos, buffer,
-               (unsigned long)nread);
-        process->circular_buffer_pos += (unsigned long)nread;
-      } else {  // Полученный stdout/stderr надо разбивать на две части.
-        memcpy(process->circular_buffer + process->circular_buffer_pos, buffer,
-               buffer_right_side_size);
-        process->circular_buffer_pos =
-            (unsigned long)nread - buffer_right_side_size;
-        memcpy(process->circular_buffer, buffer + buffer_right_side_size,
-               process->circular_buffer_pos);
-      }
-      pthread_mutex_unlock(&lock);
     }
     close(fd[PIPE_READ]);
 
@@ -319,7 +304,7 @@ void *process_worker(void *voidprocess) {
                strsignal(WTERMSIG(status)));
     } else
       snprintf(process->previous_exit_reason, siz, "Exit reason unknown!");
-    o("quit %d│%s│%s", process->restarts_counter, process->previous_exit_reason,
+    w("quit %d│%s│%s", process->restarts_counter, process->previous_exit_reason,
       process->cmd);
 
     // Решаем, что делать с процессом дальше.
@@ -335,24 +320,24 @@ void *process_worker(void *voidprocess) {
       break;
     }
     // Процесс завершился самопроизвольно - перезапускаем!
-    // Сохраняем из буффера перехваченных stdout/stderr последние n строк
-    // в буффер хранения окончания вывода погибшего процесса.
-    const int lines = sizeof(process->previous_exit_log) /
-                      sizeof(**process->previous_exit_log) /
-                      sizeof(*process->previous_exit_log);
-    const int src_siz =
-        sizeof(process->circular_buffer) / sizeof(*process->circular_buffer);
-    const int width = sizeof(*process->previous_exit_log);
-    cirbuf_copy_lines(process->circular_buffer, src_siz,
-                      process->circular_buffer_pos, process->previous_exit_log,
-                      lines, width);
-    cirbuf_clear(process->circular_buffer, src_siz,
-                 &process->circular_buffer_pos);
-    for (int i = 0; i < lines; ++i) {
-      const char *line = process->previous_exit_log[i];
-      if (strlen(line)) m("│%s\n", line);
-    }
     process->restarts_counter++;
+    cirbuf_takeout(process->circular_buffer, process->circular_buffer_pos,
+                   process->previous_exit_log);
+    cirbuf_fill(process->circular_buffer, &process->circular_buffer_pos, ' ');
+
+    const size_t n = sizeof(process->previous_exit_log) /
+                     sizeof(*(process->previous_exit_log));
+    char s[n];
+    strcpy(s, process->previous_exit_log);
+    char *p = s;
+    p = strtok(s, "\n");
+    while (p != NULL) {
+      const size_t n = strlen(p);
+      char s[n];
+      strcpy(s, p);
+      w("%s", strip_ansi_escape_codes(s));
+      p = strtok(NULL, "\n");
+    }
 
     if (pipe(fd) == -1) {
       e("pipe():%s", strerror(errno));
@@ -360,18 +345,18 @@ void *process_worker(void *voidprocess) {
     }
     pthread_mutex_unlock(&lock);
     sleep(SLEEP);
-    pid = fork();
+    process->pid = fork();
   }
   return voidprocess;
 }
 
 void handle_watch(struct mg_connection *nc, struct http_message *hm) {
   pthread_mutex_lock(&lock);
-  struct Process *new_process = malloc(sizeof(struct Process));
+  struct Process *process = malloc(sizeof(struct Process));
 
   // Счётчик последнего выданного id.
   static unsigned int largest_id = 0;
-  new_process->id = ++largest_id;
+  process->id = ++largest_id;
 
   // Читаем HTTP POST запрос вида:
   // curl -X POST http://localhost:14157/watch -d "
@@ -383,37 +368,26 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
   char buf[1024];
 
   mg_get_http_var(&hm->body, "pwd", buf, sizeof(buf));
-  strncpy(new_process->pwd, buf,
-          sizeof new_process->pwd / sizeof *new_process->pwd);
+  strncpy(process->pwd, buf, sizeof process->pwd / sizeof *process->pwd);
 
   mg_get_http_var(&hm->body, "env", buf, sizeof(buf));
-  strncpy(new_process->env, buf,
-          sizeof new_process->env / sizeof *new_process->env);
+  strncpy(process->env, buf, sizeof process->env / sizeof *process->env);
 
   mg_get_http_var(&hm->body, "cmd", buf, sizeof(buf));
-  strncpy(new_process->cmd, buf,
-          sizeof new_process->cmd / sizeof *new_process->cmd);
+  strncpy(process->cmd, buf, sizeof process->cmd / sizeof *process->cmd);
 
-  new_process->circular_buffer_pos = 0;
-  memset(new_process->circular_buffer, '\0',
-         sizeof(new_process->circular_buffer) /
-             sizeof(*new_process->circular_buffer));
+  cirbuf_fill(process->circular_buffer, &process->circular_buffer_pos, ' ');
+  memset(process->previous_exit_reason, '\0',
+         sizeof(process->previous_exit_reason));
+  memset(process->previous_exit_log, '\0', sizeof(process->previous_exit_log));
 
-  // Инициаллизация нулями буферов-хранилищ информации о падении процесса.
-  memset(new_process->previous_exit_log, '\0',
-         sizeof(new_process->previous_exit_log) /
-             sizeof(**new_process->previous_exit_log));
-  memset(new_process->previous_exit_reason, '\0',
-         sizeof(new_process->previous_exit_reason) /
-             sizeof(*new_process->previous_exit_reason));
-
-  new_process->restarts_counter = 0;
-  new_process->pid = 0;
-  new_process->action = ACTION_NONE;
-  SL_APPEND(get_data()->processes_head, new_process);
+  process->restarts_counter = 0;
+  process->pid = 0;
+  process->action = ACTION_NONE;
+  SL_APPEND(get_data()->processes_head, process);
 
   pthread_t t;
-  if (pthread_create(&t, NULL, &process_worker, new_process) != 0)
+  if (pthread_create(&t, NULL, &process_worker, process) != 0)
     e("pthread_create():%s", errno);
   pthread_detach(t);
 
@@ -484,10 +458,12 @@ void handle_message(struct mg_connection *nc, struct http_message *hm) {
 }
 
 void handle_out(struct mg_connection *nc, struct http_message *hm) {
-  mg_printf(nc, "%s",
-            "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\n"
-            "Content-Type: text/plain; charset=UTF-8\r\n"
-            "Transfer-Encoding: chunked\r\n\r\n");
+  mg_printf(
+      nc, "%s",
+      "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\n"
+      "Content-Type: text/plain; charset=UTF-8\r\n"
+      "X-Content-Type-Options: nosniff\r\n"  // Чтобы хром не пытался скачать.
+      "Transfer-Encoding: chunked\r\n\r\n");
 
   struct Data *data = get_data();
   char buf_id[2];
@@ -497,57 +473,17 @@ void handle_out(struct mg_connection *nc, struct http_message *hm) {
     struct Process *current_process = data->processes_head;
     while (current_process != NULL) {
       if (current_process->id == request_id) {
-        const unsigned long siz =
-            sizeof(current_process->previous_exit_log) /
-                sizeof(**current_process->previous_exit_log) +
-            sizeof(current_process->previous_exit_reason) /
-                sizeof(*current_process->previous_exit_reason) +
-            strlen(current_process->pwd) + strlen(current_process->env) +
-            strlen(current_process->cmd) +
-            sizeof(current_process->circular_buffer) /
-                sizeof(*current_process->circular_buffer) +
-            512;
-        char buf[siz];
-        memset(buf, 0, sizeof(buf) / sizeof(*buf));
-        sprintf(buf, ">>> cd '%s'&&%s %s\n", current_process->pwd,
-                current_process->env, current_process->cmd);
-        sprintf(buf + strlen(buf), ">>> fails: %d reason: %s%s",
+        char current_output[cirbuf_size];
+        cirbuf_takeout(current_process->circular_buffer,
+                       current_process->circular_buffer_pos, current_output);
+        char buf[cirbuf_size + LINE_MAX + cirbuf_size];
+        sprintf(buf, ">>> RESTARTS:%d REASON:%s OUTPUT:\n%s\n>>> LIVE:\n%s",
                 current_process->restarts_counter,
-                current_process->restarts_counter
-                    ? current_process->previous_exit_reason
-                    : "-",
-                current_process->restarts_counter ? " stdout/stderr:\n" : "");
-        const int lines = sizeof(current_process->previous_exit_log) /
-                          sizeof(**current_process->previous_exit_log) /
-                          sizeof(*current_process->previous_exit_log);
-        for (int i = 0; i < lines; ++i) {
-          const char *line = current_process->previous_exit_log[i];
-          if (strlen(line)) {
-            strcat(buf, line);
-            strcat(buf, "\n");
-          }
-        }
+                current_process->previous_exit_reason,
+                strip_ansi_escape_codes(current_process->previous_exit_log),
+                strip_ansi_escape_codes(current_output));
 
-        strcat(buf, "\n>>> current stdout/stderr:\n");
-        int max_newlines = 40;
-        unsigned long length = strlen(buf);
-        for (unsigned long i = current_process->circular_buffer_pos; i < siz;
-             ++i, ++length) {
-          char c = current_process->circular_buffer[i];
-          if (c == '\0') break;
-          if (c == '\n') --max_newlines;
-          if (max_newlines == 0) break;
-          buf[length] = c;
-        }
-        for (unsigned long i = 0; i < current_process->circular_buffer_pos;
-             ++i, ++length) {
-          char c = current_process->circular_buffer[i];
-          if (c == '\n') --max_newlines;
-          if (max_newlines == 0) break;
-          buf[length] = c;
-        }
-        buf[length] = '\0';
-        mg_printf_http_chunk(nc, strip_ansi_escape_codes(buf));
+        mg_printf_http_chunk(nc, buf);
         break;
       }
       current_process = current_process->next;
@@ -642,7 +578,6 @@ static void ev_handler(struct mg_connection *nc, int ev, void *ev_data) {
         }
       }
       buf[i] = 0;
-      o("http %s", buf);
 
       if (mg_vcmp(&hm->uri, "/status") == 0)
         handle_status(nc);
