@@ -23,8 +23,10 @@ add_executable(dog ${dog_sources})
 target_link_libraries(dog -lpthread -lrt)
 
 add_executable(color "tests/color.c")
-
 add_executable(segfault "tests/segfault.c")
+
+add_executable(pids "tests/pids.c")
+target_link_libraries(pids -lpthread -lrt)
 
 add_executable(std "tests/std.c")
 target_link_libraries(std -lpthread -lrt)

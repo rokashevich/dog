@@ -283,3 +283,27 @@ char* strip_ansi_escape_codes(char* s) {
   s[j - inside] = '\0';
   return s;
 }
+
+unsigned long long get_rss_by_pid2(unsigned long long rss, const pid_t pid) {
+  char buf[1024];
+  sprintf(buf, "/proc/%i/task/%i/children", pid, pid);
+  FILE* f = fopen(buf, "r");
+  if (!f) return rss;
+
+  // sprintf(buf, "/proc/%i/statm", pid);
+  // FILE* f = fopen(buf, "r");
+  // if (!f) {
+  //   *rss = 0;
+  //   return;
+  // }
+  // if (fscanf(f, "%*d %llu", rss) != 1) {
+  //   *rss = 0;
+  //   fclose(f);
+  //   return;
+  // }
+  // unsigned long long page_size = (unsigned long long)sysconf(_SC_PAGE_SIZE);
+  // *rss = *rss * page_size;
+
+  // fclose(f);
+  return rss;
+}
