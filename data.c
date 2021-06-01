@@ -446,7 +446,7 @@ void update_data(struct Data *data) {
   SL_FOREACH(data->processes_head, process) {
     ++cnt;
     if (cnt > 5) return;
-    get_rss_by_pid(&process->rss, process->pid);
+    process->rss = get_rss_by_pid(0, process->pid);
   }
 }
 
@@ -486,24 +486,4 @@ static inline void get_current_rx_tx_for_iface(unsigned long long *rx,
     }
     fclose(f);
   }
-}
-
-static inline void get_rss_by_pid(unsigned long long *rss, const pid_t pid) {
-  char buf[BUFFER_SIZE_DEFAULT];
-  sprintf(buf, "/proc/%i/statm", pid);
-  FILE *f = fopen(buf, "r");
-  if (!f) {
-    *rss = 0;
-    return;
-  }
-  if (fscanf(f, "%*d %llu", rss) != 1) {
-    *rss = 0;
-    fclose(f);
-    return;
-  }
-  unsigned long long page_size = (unsigned long long)sysconf(_SC_PAGE_SIZE);
-  *rss = *rss * page_size;
-
-  fclose(f);
-  return;
 }

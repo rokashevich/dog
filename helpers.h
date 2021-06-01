@@ -35,6 +35,6 @@ void setup_environ_from_string(const char* s);
 // т.е. всё между символами \033[ и m, включая их самих.
 char* strip_ansi_escape_codes(char* s);
 
-unsigned long long get_rss_by_pid2(unsigned long long rss, const pid_t pid);
+unsigned long long get_rss_by_pid(unsigned long long rss, const pid_t pid);
 
 #endif  // HELPERS_H

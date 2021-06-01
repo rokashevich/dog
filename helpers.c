@@ -1,6 +1,8 @@
 #include "helpers.h"
 
 #include <ctype.h>
+#include <dirent.h>
+#include <linux/limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -284,26 +286,51 @@ char* strip_ansi_escape_codes(char* s) {
   return s;
 }
 
-unsigned long long get_rss_by_pid2(unsigned long long rss, const pid_t pid) {
-  char buf[1024];
-  sprintf(buf, "/proc/%i/task/%i/children", pid, pid);
-  FILE* f = fopen(buf, "r");
-  if (!f) return rss;
+unsigned long long get_rss_by_pid(unsigned long long rss, const pid_t pid) {
+  DIR* d;
+  struct dirent* dir;
+  char tasks[PATH_MAX];
+  sprintf(tasks, "/proc/%i/task", pid);
+  d = opendir(tasks);
+  if (d) {
+    while ((dir = readdir(d)) != NULL) {
+      if (!(strcmp(dir->d_name, ".") && strcmp(dir->d_name, ".."))) continue;
+      const pid_t task_pid = atoi(dir->d_name);
+      char children[PATH_MAX];
+      sprintf(children, "/proc/%i/task/%i/children", pid, task_pid);
+      FILE* f = fopen(children, "r");
+      if (f) {
+        char c;
+        char chunk[16] = "";
+        memset(chunk, 0, sizeof(chunk));
+        int chunks = 0;
+        while ((c = fgetc(f)) && !feof(f)) {
+          if (c == ' ') {
+            chunks += 1;
+            const pid_t child_pid = atoi(chunk);
+            rss += get_rss_by_pid(rss, child_pid);
+            memset(chunk, 0, sizeof(chunk));
+          } else {
+            chunk[strlen(chunk)] = c;
+          }
+        }
+        if (chunks == 0) {
+          char statm[PATH_MAX];
+          sprintf(statm, "/proc/%i/statm", pid);
+          FILE* f = fopen(statm, "r");
+          if (!f) return 0;
 
-  // sprintf(buf, "/proc/%i/statm", pid);
-  // FILE* f = fopen(buf, "r");
-  // if (!f) {
-  //   *rss = 0;
-  //   return;
-  // }
-  // if (fscanf(f, "%*d %llu", rss) != 1) {
-  //   *rss = 0;
-  //   fclose(f);
-  //   return;
-  // }
-  // unsigned long long page_size = (unsigned long long)sysconf(_SC_PAGE_SIZE);
-  // *rss = *rss * page_size;
-
-  // fclose(f);
+          if (fscanf(f, "%*d %llu", &rss) != 1) {
+            fclose(f);
+            return 0;
+          }
+          unsigned long long page_size =
+              (unsigned long long)sysconf(_SC_PAGE_SIZE);
+          return rss * page_size;
+        }
+      }
+    }
+  }
+  closedir(d);
   return rss;
 }
