@@ -501,6 +501,8 @@ void handle_setup(struct mg_connection *nc, struct http_message *hm) {
                   sizeof data->env / sizeof *data->env);
   mg_get_http_var(&hm->body, "pwd", data->pwd,
                   sizeof data->env / sizeof *data->pwd);
+  o("setup:\ncurl -X POST 127.0.0.1:14157/setup -d \"env=%s&pwd=%s\"\n",
+    data->env, data->pwd);
   pthread_mutex_unlock(&lock);
   mg_printf(nc, "%s",
             "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
@@ -619,11 +621,8 @@ void interrupt_handler(int signum) { stop = 1; }
 
 int main() {
   logger_init();
-  m("Log format:\n");
-  m("YYMMDDhhmmss quit N│reason│cmd\n");
-  m("[space]most recent stdout/stderr of the quit process\n");
-  m("version program " SOURCES_VERSION "\n");
-  m("version mongoose " MG_VERSION "\n");
+  o("version program " SOURCES_VERSION);
+  o("version mongoose " MG_VERSION);
 
   if (pthread_mutex_init(&lock, NULL) != 0) {
     e("pthread_mutex_init():%s", strerror(errno));
@@ -644,6 +643,7 @@ int main() {
 
   mg_mgr_init(&mgr, NULL);
   nc = mg_bind(&mgr, s_http_port, ev_handler);
+  o("port=%s", s_http_port);
   if (!nc) {
     e("mg_bind(port %s)", s_http_port);
     return 1;
@@ -651,7 +651,6 @@ int main() {
   mg_set_protocol_http_websocket(nc);
   s_http_server_opts.document_root = ".";
   s_http_server_opts.enable_directory_listing = "yes";
-  // o("start server at %s\n", s_http_port);
   signal(SIGINT, interrupt_handler);
   signal(SIGTERM, interrupt_handler);
   signal(SIGQUIT, interrupt_handler);

@@ -442,11 +442,12 @@ void update_data(struct Data *data) {
 
   // Обновляем данные по мониторингу запущенных процессов.
   struct Process *process;
-  int cnt = 0;
+  // int cnt = 0;
   SL_FOREACH(data->processes_head, process) {
-    ++cnt;
-    if (cnt > 5) return;
+    // ++cnt;
+    // if (cnt > 5) return;
     process->rss = get_rss_by_pid(0, process->pid);
+    // process->rss = 1024;
   }
 }
 
