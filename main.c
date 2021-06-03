@@ -23,7 +23,6 @@
 #include "defines.h"
 #include "helpers.h"
 #include "list.h"
-#include "logger.h"
 #include "mongoose.h"
 #include "mongoose_helper.h"
 

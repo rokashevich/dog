@@ -2,13 +2,130 @@
 
 #include <ctype.h>
 #include <dirent.h>
+#include <errno.h>
 #include <linux/limits.h>
+#include <pthread.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
+
+// https://www.gnu.org/software/libc/manual/html_node/Backtraces.html
+// void print_trace(void) {
+//  void *array[10];
+//  char **strings;
+//  int size, i;
+
+//  size = backtrace(array, 10);
+//  strings = backtrace_symbols(array, size);
+//  if (strings != NULL) {
+//    printf("Obtained %d stack frames.\n", size);
+//    for (i = 0; i < size; i++) printf("%s\n", strings[i]);
+//  }
+
+//  free(strings);
+//}
+
+static pthread_mutex_t lock;
+
+void logger_init() {
+  if (pthread_mutex_init(&lock, NULL) != 0) {
+    fprintf(stdout, "pthread_mutex_init():%s\n", strerror(errno));
+  }
+}
+
+void logger_reset() {}
+
+void printer(int with_timestamp, const char* suffix, char* format,
+             va_list arg) {
+  pthread_mutex_lock(&lock);
+  struct timespec ts;
+  clock_gettime(CLOCK_REALTIME, &ts);
+  struct tm* ptm = localtime(&ts.tv_sec);
+
+  if (with_timestamp) {
+    fprintf(stdout, "%d%02d%02d%02d%02d%02d", ptm->tm_year - 100,
+            ptm->tm_mon + 1, ptm->tm_mday, ptm->tm_hour, ptm->tm_min,
+            ptm->tm_sec);
+    fprintf(stdout, "%s", suffix);
+  }
+  char* traverse = format;
+  unsigned int i;
+  char* s;
+  while (*traverse) {
+    if (*traverse != '%') {
+      fprintf(stdout, "%c", *traverse);
+      traverse++;
+      continue;
+    } else
+      traverse++;
+
+    switch (*traverse) {
+      case 'c':
+        i = va_arg(arg, int);
+        fprintf(stdout, "%c", i);
+        break;
+
+      case 'd':
+        i = va_arg(arg, int);
+        fprintf(stdout, "%d", i);
+        break;
+
+      case 's':
+        s = va_arg(arg, char*);
+        fprintf(stdout, "%s", s);
+        break;
+
+      default:
+        putchar(*traverse);
+        traverse++;
+        continue;
+    }
+    traverse++;
+  }
+  if (with_timestamp) fprintf(stdout, "\n");
+  fflush(stdout);
+  pthread_mutex_unlock(&lock);
+}
+
+void o(char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  printer(1, " ", format, args);
+  va_end(args);
+}
+
+void w(char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  printer(1, "!", format, args);
+  va_end(args);
+}
+
+void e(char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  printer(1, "*", format, args);
+  va_end(args);
+}
+
+void d(char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  printer(1, ">", format, args);
+  va_end(args);
+}
+
+void m(char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  printer(0, NULL, format, args);
+  va_end(args);
+}
 
 char* qstrcat(char* dest, char* src) {
   while (*dest) dest++;
@@ -286,22 +403,41 @@ char* strip_ansi_escape_codes(char* s) {
   return s;
 }
 
-unsigned long long get_rss_by_pid(unsigned long long rss, const pid_t pid) {
-  DIR* d;
-  FILE *f1, *f2;
-  f1 = f2 = NULL;
-  struct dirent* dir;
+unsigned long long count_rss(const pid_t pid) {
+  return count_rss_recurse(0, pid, 0);
+}
+
+unsigned long long count_rss_recurse(unsigned long long rss, const pid_t pid,
+                                     int recursion_depth) {
+  const int recursion_depth_warning = 16;
+  if (recursion_depth > recursion_depth_warning)
+    d("recursion_depth=%d", recursion_depth);
+
   char tasks[PATH_MAX];
   sprintf(tasks, "/proc/%i/task", pid);
-  d = opendir(tasks);
-  if (!d) return rss;
-  while ((dir = readdir(d)) != NULL) {
-    if (!(strcmp(dir->d_name, ".") && strcmp(dir->d_name, ".."))) continue;
-    const pid_t task_pid = atoi(dir->d_name);
+  DIR* dir_stream = opendir(tasks);
+  if (!dir_stream) {
+    w("opendir(%s):%s", tasks, strerror(errno));
+    return rss;
+  }
+  FILE* f1 = NULL;
+  FILE* f2 = NULL;
+  do {
+    const struct dirent* dir_entry = readdir(dir_stream);
+    if (dir_entry == NULL) {
+      if (errno) d("readdir(%s):%s", tasks, strerror(errno));
+      break;
+    }
+    if (!(strcmp(dir_entry->d_name, ".") && strcmp(dir_entry->d_name, "..")))
+      continue;
+    const pid_t task_pid = atoi(dir_entry->d_name);
     char children[PATH_MAX];
     sprintf(children, "/proc/%i/task/%i/children", pid, task_pid);
     f1 = fopen(children, "r");
-    if (!f1) break;
+    if (!f1) {
+      d("fopen(%s):%s", children, strerror(errno));
+      break;
+    }
 
     char c;
     char chunk[16] = "";
@@ -311,7 +447,7 @@ unsigned long long get_rss_by_pid(unsigned long long rss, const pid_t pid) {
       if (c == ' ') {
         chunks += 1;
         const pid_t child_pid = atoi(chunk);
-        rss += get_rss_by_pid(rss, child_pid);
+        rss += count_rss_recurse(rss, child_pid, recursion_depth + 1);
         memset(chunk, 0, sizeof(chunk));
       } else {
         chunk[strlen(chunk)] = c;
@@ -321,16 +457,22 @@ unsigned long long get_rss_by_pid(unsigned long long rss, const pid_t pid) {
       char statm[PATH_MAX];
       sprintf(statm, "/proc/%i/statm", pid);
       f2 = fopen(statm, "r");
-      if (!f2) break;
+      if (!f2) {
+        d("fopen(%s):%s", statm, strerror(errno));
+        break;
+      }
       unsigned long long pages;
-      if (fscanf(f2, "%*d %llu", &pages) != 1) break;
+      if (fscanf(f2, "%*d %llu", &pages) != 1) {
+        d("fscanf(%s):%s", statm, strerror(errno));
+        break;
+      }
       unsigned long long page_size = (unsigned long long)sysconf(_SC_PAGE_SIZE);
-      const unsigned long long new_rss = pages * page_size;
-      return new_rss;
+      rss = pages * page_size;
+      break;
     }
-  }
+  } while (1);
+  closedir(dir_stream);
   if (f1) fclose(f1);
   if (f2) fclose(f2);
-  if (d) closedir(d);
   return rss;
 }

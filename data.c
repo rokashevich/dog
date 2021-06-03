@@ -2,6 +2,7 @@
 
 #include <arpa/inet.h>
 #include <dirent.h>
+#include <errno.h>
 #include <linux/ethtool.h>
 #include <linux/sockios.h>
 #include <mntent.h>
@@ -244,7 +245,7 @@ void update_data(struct Data *data) {
   // Обновляем данные по загрузке ядер процессора.
   // https://github.com/Leo-G/DevopsWiki/wiki/How-Linux-CPU-Usage-Time-and-Percentage-is-calculated
   if ((f = fopen("/proc/stat", "r")) == NULL) {
-    printf("*** ERROR: fopen: /proc/stat\n");
+    e("fopen(/proc/stat):%s", strerror(errno));
     return;
   }
 
@@ -446,7 +447,9 @@ void update_data(struct Data *data) {
   SL_FOREACH(data->processes_head, process) {
     // ++cnt;
     // if (cnt > 5) return;
-    process->rss = get_rss_by_pid(0, process->pid);
+    //    printf("1");
+    process->rss = count_rss(process->pid);
+    //    printf("2\n");
     // process->rss = 1024;
   }
 }

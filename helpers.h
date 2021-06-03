@@ -3,6 +3,15 @@
 
 #include <sys/types.h>
 
+// ЛОГГЕР
+void logger_init();
+void o(char*, ...);  // 210603130702 ... информация
+void w(char*, ...);  // 210603130702!... внимание (проблема со щенками)
+void e(char*, ...);  // 210603130702*... ошибка (самой собаки)
+void d(char*, ...);  // 210603130702>... отладочные сообщения
+void m(char*, ...);  // обычный printf без префикса и \n
+
+// ДРУГОЕ
 char* qstrcat(char* dest, char* src);
 
 char* itoa(int i);
@@ -35,6 +44,8 @@ void setup_environ_from_string(const char* s);
 // т.е. всё между символами \033[ и m, включая их самих.
 char* strip_ansi_escape_codes(char* s);
 
-unsigned long long get_rss_by_pid(unsigned long long rss, const pid_t pid);
+unsigned long long count_rss(const pid_t pid);
+unsigned long long count_rss_recurse(unsigned long long rss, const pid_t pid,
+                                     int depth);
 
 #endif  // HELPERS_H
