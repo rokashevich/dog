@@ -458,41 +458,6 @@ void handle_message(struct mg_connection *nc, struct http_message *hm) {
   pthread_mutex_unlock(&lock);
 }
 
-void handle_out(struct mg_connection *nc, struct http_message *hm) {
-  mg_printf(
-      nc, "%s",
-      "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\n"
-      "Content-Type: text/plain; charset=UTF-8\r\n"
-      "X-Content-Type-Options: nosniff\r\n"  // Чтобы хром не пытался скачать.
-      "Transfer-Encoding: chunked\r\n\r\n");
-
-  struct Data *data = get_data();
-  char buf_id[2];
-  if (mg_get_query_string_var(&hm->query_string, "id", buf_id, sizeof(buf_id)) >
-      0) {
-    unsigned int request_id = (unsigned int)atoi(buf_id);
-    struct Process *current_process = data->processes_head;
-    while (current_process != NULL) {
-      if (current_process->id == request_id) {
-        char current_output[cirbuf_size];
-        cirbuf_takeout(current_process->circular_buffer,
-                       current_process->circular_buffer_pos, current_output);
-        char buf[cirbuf_size + LINE_MAX + cirbuf_size];
-        sprintf(buf, ">>> RESTARTS:%d REASON:%s OUTPUT:\n%s\n>>> LIVE:\n%s",
-                current_process->restarts_counter,
-                current_process->previous_exit_reason,
-                strip_ansi_escape_codes(current_process->previous_exit_log),
-                strip_ansi_escape_codes(current_output));
-
-        mg_printf_http_chunk(nc, buf);
-        break;
-      }
-      current_process = current_process->next;
-    }
-  }
-  mg_send_http_chunk(nc, "", 0);
-}
-
 void handle_setup(struct mg_connection *nc, struct http_message *hm) {
   pthread_mutex_lock(&lock);
   struct Data *data = get_data();
@@ -590,8 +555,6 @@ static void ev_handler(struct mg_connection *nc, int ev, void *ev_data) {
         handle_toggle(nc, hm);
       else if (mg_vcmp(&hm->uri, "/message") == 0)
         handle_message(nc, hm);
-      else if (mg_vcmp(&hm->uri, "/out") == 0)
-        handle_out(nc, hm);
       else if (mg_vcmp(&hm->uri, "/setup") == 0)
         handle_setup(nc, hm);
       else if (mg_vcmp(&hm->uri, "/reset") == 0)

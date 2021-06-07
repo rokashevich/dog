@@ -448,6 +448,7 @@ void update_data(struct Data *data) {
     // ++cnt;
     // if (cnt > 5) return;
     //    printf("1");
+    //printf("_____________________________ count_rss(%d)\n",process->pid);
     process->rss = count_rss(process->pid);
     //    printf("2\n");
     // process->rss = 1024;

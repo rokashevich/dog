@@ -8,12 +8,12 @@
 #include <unistd.h>
 static void* func() {
   if (fork() == 0) {
-    char* args[] = {"/usr/bin/xterm", NULL};
+    char* args[] = {"/usr/bin/xterm", "-e", "mc", NULL};
     execvp(args[0], args);
     return NULL;
   }
   if (fork() == 0) {
-    char* args[] = {"/usr/bin/xterm", NULL};
+    char* args[] = {"/usr/bin/xterm", "-e", "mc", NULL};
     execvp(args[0], args);
     return NULL;
   }
