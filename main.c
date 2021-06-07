@@ -173,9 +173,13 @@ void gen_json(struct Data *data) {
     p = qstrcat(p, ",\"rss\":");
     snprintf(b, s, "%llu", process->rss);
     p = qstrcat(p, b);
-    p = qstrcat(p, ",\"restarts_counter\":");
+    p = qstrcat(p, ",\"restarts\":");
     snprintf(b, s, "%u", process->restarts_counter);
     p = qstrcat(p, b);
+    p = qstrcat(p, ",\"log\":\"");
+    p = qstrcat(p, process->previous_exit_log);
+    p = qstrcat(p, "\"");
+
     p = qstrcat(p, "}");
     if (process->next) p = qstrcat(p, ",");
   }
@@ -197,8 +201,11 @@ void handle_status(struct mg_connection *nc) {
 
   struct Data *data = get_data();
   mg_printf(nc, "%s",
-            "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: "
-            "*\r\nTransfer-Encoding: chunked\r\n\r\n");
+            "HTTP/1.1 200 OK\r\n"
+            "Access-Control-Allow-Origin: *\r\n"
+            "Content-Type: application/json\r\n"
+            "Connection: close\r\n"
+            "Transfer-Encoding: chunked\r\n\r\n");
   mg_printf_http_chunk(nc, data->json);
   mg_send_http_chunk(nc, "", 0);
 
@@ -288,21 +295,18 @@ void *process_worker(void *voidprocess) {
 
     // Обрабатываем завершение процесса.
     pthread_mutex_lock(&lock);
-    int siz = sizeof(process->previous_exit_reason) /
-              sizeof(*process->previous_exit_reason);
+    const int siz = 512;
+    char reason[siz];
     if (WIFEXITED(status)) {
-      snprintf(process->previous_exit_reason, siz, "Exit code %d",
-               WEXITSTATUS(status));
+      snprintf(reason, siz, "Exit code %d", WEXITSTATUS(status));
     } else if (WIFSTOPPED(status)) {
-      snprintf(process->previous_exit_reason, siz,
-               "Child stopped by signal %d (%s)", WSTOPSIG(status),
+      snprintf(reason, siz, "Child stopped by signal %d (%s)", WSTOPSIG(status),
                strsignal(WSTOPSIG(status)));
     } else if (WIFSIGNALED(status)) {
-      snprintf(process->previous_exit_reason, siz,
-               "Child killed by signal %d (%s)", WTERMSIG(status),
+      snprintf(reason, siz, "Child killed by signal %d (%s)", WTERMSIG(status),
                strsignal(WTERMSIG(status)));
     } else
-      snprintf(process->previous_exit_reason, siz, "Exit reason unknown!");
+      snprintf(reason, siz, "Exit reason unknown!");
 
     // Решаем, что делать с процессом дальше.
     if (process->action == ACTION_KILL) {
@@ -319,26 +323,34 @@ void *process_worker(void *voidprocess) {
 
     // Процесс завершился самопроизвольно - перезапускаем!
     process->restarts_counter++;
-    w("die %s %d %s", process->cmd, process->restarts_counter,
-      process->previous_exit_reason);
+    strcpy(process->previous_exit_log, reason);
     cirbuf_takeout(process->circular_buffer, process->circular_buffer_pos,
-                   process->previous_exit_log);
+                   process->previous_exit_log + strlen(reason));
+    const buf_max_len = sizeof(process->previous_exit_log) /
+                        sizeof(*process->previous_exit_log);
+    json_safe(strip_ansi_escape_codes(process->previous_exit_log), buf_max_len);
+    // for (int i = 0; i < sizeof(process->circular_buffer) /
+    //                         sizeof(*process->circular_buffer);
+    //      ++i) {
+    //   printf("[%c]", process->circular_buffer[i]);
+    // }
+    printf("\n");
+    w("die %s %d %s", process->cmd, process->restarts_counter,
+      process->previous_exit_log);
+    // const size_t n = strlen(process->previous_exit_log);
+    // char s[n];
+    // strcpy(s, process->previous_exit_log);
+    // char *p = s;
+    // p = strtok(s, "\n");
+    // while (p != NULL) {
+    //   const size_t n = strlen(p);
+    //   char s[n];
+    //   strcpy(s, p);
+    //   p = strtok(NULL, "\n");
+    //   w("die %s %d %s", process->cmd, process->restarts_counter,
+    //     strip_ansi_escape_codes(s));
+    // }
     cirbuf_fill(process->circular_buffer, &process->circular_buffer_pos, ' ');
-
-    const size_t n = sizeof(process->previous_exit_log) /
-                     sizeof(*(process->previous_exit_log));
-    char s[n];
-    strcpy(s, process->previous_exit_log);
-    char *p = s;
-    p = strtok(s, "\n");
-    while (p != NULL) {
-      const size_t n = strlen(p);
-      char s[n];
-      strcpy(s, p);
-      p = strtok(NULL, "\n");
-      w("die %s %d %s", process->cmd, process->restarts_counter,
-        strip_ansi_escape_codes(s));
-    }
 
     if (pipe(fd) == -1) {
       e("pipe():%s", strerror(errno));
@@ -378,8 +390,6 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
   strncpy(process->cmd, buf, sizeof process->cmd / sizeof *process->cmd);
 
   cirbuf_fill(process->circular_buffer, &process->circular_buffer_pos, ' ');
-  memset(process->previous_exit_reason, '\0',
-         sizeof(process->previous_exit_reason));
   memset(process->previous_exit_log, '\0', sizeof(process->previous_exit_log));
 
   process->restarts_counter = 0;

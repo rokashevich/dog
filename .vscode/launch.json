@@ -8,7 +8,7 @@
       "name": "default",
       "type": "cppdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/build/pids",
+      "program": "${workspaceFolder}/build/dog",
       "args": ["26260"],
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",

@@ -29,10 +29,9 @@ struct Process {
   char env[1024];  // DISPLAY=$DISPLAY LD_LIBRARY_PATH=.:../lib
   char cmd[1024];  // program --arg-one 1 --arg-two 2
 
-  char circular_buffer[cirbuf_size];  // Для stdout + stderr.
   size_t circular_buffer_pos;
-  char previous_exit_reason[512];
-  char previous_exit_log[cirbuf_size];  // Для последних строк перед падением.
+  char circular_buffer[cirbuf_size];  // TODO сделать независимыми,пока
+  char previous_exit_log[cirbuf_size * 2];  // это дожны быть в точно больше
 
   pid_t pid;
   unsigned int restarts_counter;

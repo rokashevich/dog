@@ -48,4 +48,8 @@ unsigned long long count_rss(const pid_t pid);
 unsigned long long count_rss_recurse(unsigned long long rss, const pid_t pid,
                                      int depth);
 
+// dst должна быть минимум в два раза больше src на случай если всё придётся
+// экранировать!
+char* json_safe(char* text_buf, size_t buf_max_len);
+
 #endif  // HELPERS_H

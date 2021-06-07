@@ -413,21 +413,22 @@ unsigned long long count_rss_recurse(unsigned long long rss, const pid_t pid,
   if (recursion_depth > recursion_depth_warning)
     d("recursion_depth=%d", recursion_depth);
 
-  //char depth[] = "---------------------------------------";
-  //depth[recursion_depth+1] = 0;
+  // char depth[] = "---------------------------------------";
+  // depth[recursion_depth+1] = 0;
 
   char tasks[PATH_MAX];
   sprintf(tasks, "/proc/%i/task", pid);
   DIR* dir_stream = opendir(tasks);
   if (!dir_stream) {
-    w("opendir(%s):%s", tasks, strerror(errno));
+    // TODO проверить наличие pid и только если есть - ругаться
+    // w("opendir(%s):%s", tasks, strerror(errno));
     return rss;
   }
   FILE* f1 = NULL;
   FILE* f2 = NULL;
-  //d("%s opened %s",depth, tasks);
+  // d("%s opened %s",depth, tasks);
   do {
-    errno = 0; // Обнуляем, чтобы отличить ошибку от конца итерации.
+    errno = 0;  // Обнуляем, чтобы отличить ошибку от конца итерации.
     const struct dirent* dir_entry = readdir(dir_stream);
     if (dir_entry == NULL) {
       if (errno) d("readdir(%s):%s", tasks, strerror(errno));
@@ -438,7 +439,7 @@ unsigned long long count_rss_recurse(unsigned long long rss, const pid_t pid,
     const pid_t task_pid = atoi(dir_entry->d_name);
     char children[PATH_MAX];
     sprintf(children, "/proc/%i/task/%i/children", pid, task_pid);
-    //d("%s children %s",depth, children);
+    // d("%s children %s",depth, children);
     f1 = fopen(children, "r");
     if (!f1) {
       d("fopen(%s):%s", children, strerror(errno));
@@ -453,7 +454,7 @@ unsigned long long count_rss_recurse(unsigned long long rss, const pid_t pid,
       if (c == ' ') {
         chunks += 1;
         const pid_t child_pid = atoi(chunk);
-        //d("%s recurse child pid=%d",depth, child_pid);
+        // d("%s recurse child pid=%d",depth, child_pid);
         rss += count_rss_recurse(rss, child_pid, recursion_depth + 1);
         memset(chunk, 0, sizeof(chunk));
       } else {
@@ -475,11 +476,27 @@ unsigned long long count_rss_recurse(unsigned long long rss, const pid_t pid,
       }
       unsigned long long page_size = (unsigned long long)sysconf(_SC_PAGE_SIZE);
       rss = pages * page_size;
-      //d("%s REACHED %s",depth, statm);
+      // d("%s REACHED %s",depth, statm);
     }
   } while (1);
   closedir(dir_stream);
   if (f1) fclose(f1);
   if (f2) fclose(f2);
   return rss;
+}
+
+char* json_safe(char* text_buf, size_t buf_max_len) {
+  char buf[buf_max_len];
+  int j = 0;
+  for (int i = 0; i < strlen(text_buf), j < buf_max_len; ++i, ++j) {
+    const char c = text_buf[i];
+    if (c == '\n') {
+      buf[j++] = '\\';
+      buf[j++] = '\\';
+      buf[j] = 'n';
+    } else
+      buf[j] = c;
+  }
+  buf[j] = 0;
+  strcpy(text_buf, buf);
 }
