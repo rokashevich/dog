@@ -419,69 +419,62 @@ unsigned long long count_rss_recurse(unsigned long long rss, const pid_t pid,
   char tasks[PATH_MAX];
   sprintf(tasks, "/proc/%i/task", pid);
   DIR* dir_stream = opendir(tasks);
-  if (!dir_stream) {
-    // TODO проверить наличие pid и только если есть - ругаться
-    // w("opendir(%s):%s", tasks, strerror(errno));
-    return rss;
-  }
-  FILE* f1 = NULL;
-  FILE* f2 = NULL;
-  // d("%s opened %s",depth, tasks);
-  do {
-    errno = 0;  // Обнуляем, чтобы отличить ошибку от конца итерации.
-    const struct dirent* dir_entry = readdir(dir_stream);
-    if (dir_entry == NULL) {
-      if (errno) d("readdir(%s):%s", tasks, strerror(errno));
-      break;
-    }
-    if (!(strcmp(dir_entry->d_name, ".") && strcmp(dir_entry->d_name, "..")))
-      continue;
-    const pid_t task_pid = atoi(dir_entry->d_name);
-    char children[PATH_MAX];
-    sprintf(children, "/proc/%i/task/%i/children", pid, task_pid);
-    // d("%s children %s",depth, children);
-    f1 = fopen(children, "r");
-    if (!f1) {
-      d("fopen(%s):%s", children, strerror(errno));
-      continue;
-    }
+  if (dir_stream) {
+    // d("%s opened %s",depth, tasks);
+    do {
+      errno = 0;  // Обнуляем, чтобы отличить ошибку от конца итерации.
+      const struct dirent* dir_entry = readdir(dir_stream);
+      if (dir_entry == NULL) {
+        if (errno) d("readdir(%s):%s", tasks, strerror(errno));
+        break;
+      }
+      if (!(strcmp(dir_entry->d_name, ".") && strcmp(dir_entry->d_name, "..")))
+        continue;
+      const pid_t task_pid = atoi(dir_entry->d_name);
+      char children[PATH_MAX];
+      sprintf(children, "/proc/%i/task/%i/children", pid, task_pid);
+      // d("%s children %s",depth, children);
 
-    char c;
-    char chunk[16] = "";
-    memset(chunk, 0, sizeof(chunk));
-    int chunks = 0;
-    while ((c = fgetc(f1)) && !feof(f1)) {
-      if (c == ' ') {
-        chunks += 1;
-        const pid_t child_pid = atoi(chunk);
-        // d("%s recurse child pid=%d",depth, child_pid);
-        rss += count_rss_recurse(rss, child_pid, recursion_depth + 1);
-        memset(chunk, 0, sizeof(chunk));
-      } else {
-        chunk[strlen(chunk)] = c;
-      }
-    }
-    if (chunks == 0) {
-      char statm[PATH_MAX];
-      sprintf(statm, "/proc/%i/statm", pid);
-      f2 = fopen(statm, "r");
-      if (!f2) {
-        d("fopen(%s):%s", statm, strerror(errno));
+      FILE* f1 = fopen(children, "r");
+      if (!f1) {
+        // d("fopen(%s):%s", children, strerror(errno));
         break;
       }
-      unsigned long long pages;
-      if (fscanf(f2, "%*d %llu", &pages) != 1) {
-        d("fscanf(%s):%s", statm, strerror(errno));
-        break;
+      char c;
+      char chunk[16] = "";
+      memset(chunk, 0, sizeof(chunk));
+      int chunks = 0;
+      while ((c = fgetc(f1)) && !feof(f1)) {
+        if (c == ' ') {
+          chunks += 1;
+          const pid_t child_pid = atoi(chunk);
+          // d("%s recurse child pid=%d",depth, child_pid);
+          rss += count_rss_recurse(rss, child_pid, recursion_depth + 1);
+          memset(chunk, 0, sizeof(chunk));
+        } else {
+          chunk[strlen(chunk)] = c;
+        }
       }
-      unsigned long long page_size = (unsigned long long)sysconf(_SC_PAGE_SIZE);
-      rss = pages * page_size;
-      // d("%s REACHED %s",depth, statm);
-    }
-  } while (1);
-  closedir(dir_stream);
-  if (f1) fclose(f1);
-  if (f2) fclose(f2);
+      fclose(f1);
+
+      if (chunks == 0) {
+        char statm[PATH_MAX];
+        sprintf(statm, "/proc/%i/statm", pid);
+        FILE* f2 = fopen(statm, "r");
+        if (f2) {
+          unsigned long long pages;
+          if (fscanf(f2, "%*d %llu", &pages) == 1) {
+            unsigned long long page_size =
+                (unsigned long long)sysconf(_SC_PAGE_SIZE);
+            rss = pages * page_size;
+            // d("%s REACHED %s",depth, statm);
+          }
+          fclose(f2);
+        }
+      }
+    } while (1);
+    closedir(dir_stream);
+  }
   return rss;
 }
 
@@ -494,6 +487,9 @@ char* json_safe(char* text_buf, size_t buf_max_len) {
       buf[j++] = '\\';
       buf[j++] = '\\';
       buf[j] = 'n';
+    } else if (c == '"') {
+      buf[j++] = '\\';
+      buf[j] = '"';
     } else
       buf[j] = c;
   }
