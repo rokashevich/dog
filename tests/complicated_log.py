@@ -13,6 +13,8 @@ counter = 0
 while True:
     counter += 1
     sys.stdout.write(
+        "                   s    p    a     c     e                  ")
+    sys.stdout.write(
         str(counter)+f" {bcolors.OK}English English English{bcolors.RESET}\n")
     sys.stdout.write(str(counter) +
                      f" {bcolors.WARNING}Русский русский русский{bcolors.RESET}\n")
@@ -21,5 +23,5 @@ while True:
     sys.stdout.flush()
     sys.stderr.flush()
     time.sleep(0.1)
-    if counter == 100:
-        break
+    # if counter == 100:
+    #     break

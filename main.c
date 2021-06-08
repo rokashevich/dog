@@ -326,9 +326,15 @@ void *process_worker(void *voidprocess) {
     strcpy(process->previous_exit_log, reason);
     cirbuf_takeout(process->circular_buffer, process->circular_buffer_pos,
                    process->previous_exit_log + strlen(reason));
-    const buf_max_len = sizeof(process->previous_exit_log) /
-                        sizeof(*process->previous_exit_log);
-    json_safe(strip_ansi_escape_codes(process->previous_exit_log), buf_max_len);
+    const int buf_max_len = sizeof(process->previous_exit_log) /
+                            sizeof(*process->previous_exit_log);
+
+    strip_ansi_escape_codes(process->previous_exit_log);
+    nonprintable_to_whitespace(process->previous_exit_log);
+    squeeze_whitespaces(process->previous_exit_log);
+    newline_ascii_to_unicode(process->previous_exit_log, buf_max_len);
+    json_safe(process->previous_exit_log, buf_max_len);
+
     // for (int i = 0; i < sizeof(process->circular_buffer) /
     //                         sizeof(*process->circular_buffer);
     //      ++i) {

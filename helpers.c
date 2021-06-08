@@ -339,12 +339,6 @@ int match(const char* pattern, const char* candidate, int p, int c) {
   }
 }
 
-char* strip(char* s) {
-  const int len = strlen(s);
-  printf("%d-", len);
-  return s;
-}
-
 void setup_environ_from_string(const char* s) {
   // Очищаем текущее окружение.
   extern char** environ;
@@ -401,6 +395,33 @@ char* strip_ansi_escape_codes(char* s) {
   }
   s[j - inside] = '\0';
   return s;
+}
+
+char* nonprintable_to_whitespace(char* s) {
+  for (int i = 0; s[i] != '\0'; ++i) {
+    switch (s[i]) {
+      case '\a':;
+      case '\b':;
+      case '\t':;
+      case '\v':;
+      case '\f':;
+      case '\r':;
+      case '\e':
+        s[i] = ' ';
+        break;
+      default:;
+    }
+  }
+}
+
+char* squeeze_whitespaces(char* s) {
+  // Схлопываем все последовательности проблов в единственный.
+  int j = 0;
+  for (int i = 0; s[i] != '\0'; ++i) {
+    while (s[i] == ' ' && s[i + 1] == ' ' && s[i + 1] != '\0') ++i;
+    s[j++] = s[i];
+  }
+  s[j] = 0;
 }
 
 unsigned long long count_rss(const pid_t pid) {
@@ -492,6 +513,25 @@ char* json_safe(char* text_buf, size_t buf_max_len) {
       buf[j] = '"';
     } else
       buf[j] = c;
+  }
+  buf[j] = 0;
+  strcpy(text_buf, buf);
+}
+
+char* newline_ascii_to_unicode(char* text_buf, size_t buf_max_len) {
+  char buf[buf_max_len];
+  int j = 0;
+  for (int i = 0; i < strlen(text_buf), j < buf_max_len; ++i, ++j) {
+    const char c = text_buf[i];
+    if (c == '\n') {
+      const char unicode_newline[] = "&#13;&#10;";
+      const int unicode_newline_len = strlen(unicode_newline);
+      const int remaining_len = buf_max_len - j;
+      if (remaining_len < unicode_newline_len) break;
+      for (int k = 0; k < unicode_newline_len; k++)
+        buf[j++] = unicode_newline[k];
+    }
+    buf[j] = c;
   }
   buf[j] = 0;
   strcpy(text_buf, buf);

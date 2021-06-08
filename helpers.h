@@ -33,20 +33,23 @@ void free_const_ref_to_string_array(const char** s);
 // В случае успеха возвращает 1.
 int match(const char* pattern, const char* candidate, int p, int c);
 
-// Удаляет начальные и конечные пробелы, конечный символ перехода
-// на новую строку.
-char* strip(char* s);
-
 // Очищаем окружение и выставляем новое из строки вида "A=a B=b C=$B:d"
 void setup_environ_from_string(const char* s);
+
+unsigned long long count_rss(const pid_t pid);
+unsigned long long count_rss_recurse(unsigned long long rss, const pid_t pid,
+                                     int depth);
 
 // Удаляет управляющие последовательности (ANSI escape code)
 // т.е. всё между символами \033[ и m, включая их самих.
 char* strip_ansi_escape_codes(char* s);
 
-unsigned long long count_rss(const pid_t pid);
-unsigned long long count_rss_recurse(unsigned long long rss, const pid_t pid,
-                                     int depth);
+char* nonprintable_to_whitespace(char* s);
+
+char* squeeze_whitespaces(char* s);
+
+// Переводит '\n' в '&#13;&#10;' (CRLF) для вставки в title, например.
+char* newline_ascii_to_unicode(char* text_buf, size_t buf_max_len);
 
 // dst должна быть минимум в два раза больше src на случай если всё придётся
 // экранировать!
