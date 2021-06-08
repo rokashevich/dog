@@ -379,51 +379,6 @@ void setup_environ_from_string(const char* s) {
   } while (++pos < strlen(s) + 1);
 }
 
-char* strip_ansi_escape_codes(char* s) {
-  int j = 0, inside = 0;
-  for (int i = 0; s[i] != '\0'; ++i) {
-    if (s[i] == '\033') {
-      inside = 1;
-    }
-    s[j] = s[i];
-    if (!inside) {
-      ++j;
-    }
-    if (s[i] == 'm') {
-      inside = 0;
-    }
-  }
-  s[j - inside] = '\0';
-  return s;
-}
-
-char* nonprintable_to_whitespace(char* s) {
-  for (int i = 0; s[i] != '\0'; ++i) {
-    switch (s[i]) {
-      case '\a':;
-      case '\b':;
-      case '\t':;
-      case '\v':;
-      case '\f':;
-      case '\r':;
-      case '\e':
-        s[i] = ' ';
-        break;
-      default:;
-    }
-  }
-}
-
-char* squeeze_whitespaces(char* s) {
-  // Схлопываем все последовательности проблов в единственный.
-  int j = 0;
-  for (int i = 0; s[i] != '\0'; ++i) {
-    while (s[i] == ' ' && s[i + 1] == ' ' && s[i + 1] != '\0') ++i;
-    s[j++] = s[i];
-  }
-  s[j] = 0;
-}
-
 unsigned long long count_rss(const pid_t pid) {
   return count_rss_recurse(0, pid, 0);
 }
@@ -499,26 +454,52 @@ unsigned long long count_rss_recurse(unsigned long long rss, const pid_t pid,
   return rss;
 }
 
-char* json_safe(char* text_buf, size_t buf_max_len) {
-  char buf[buf_max_len];
-  int j = 0;
-  for (int i = 0; i < strlen(text_buf), j < buf_max_len; ++i, ++j) {
-    const char c = text_buf[i];
-    if (c == '\n') {
-      buf[j++] = '\\';
-      buf[j++] = '\\';
-      buf[j] = 'n';
-    } else if (c == '"') {
-      buf[j++] = '\\';
-      buf[j] = '"';
-    } else
-      buf[j] = c;
+void strip_ansi_escape_codes(char* s) {
+  int j = 0, inside = 0;
+  for (int i = 0; s[i] != '\0'; ++i) {
+    if (s[i] == '\033') {
+      inside = 1;
+    }
+    s[j] = s[i];
+    if (!inside) {
+      ++j;
+    }
+    if (s[i] == 'm') {
+      inside = 0;
+    }
   }
-  buf[j] = 0;
-  strcpy(text_buf, buf);
+  s[j - inside] = '\0';
+  return s;
 }
 
-char* newline_ascii_to_unicode(char* text_buf, size_t buf_max_len) {
+void nonprintable_to_whitespace(char* s) {
+  for (int i = 0; s[i] != '\0'; ++i) {
+    switch (s[i]) {
+      case '\a':;
+      case '\b':;
+      case '\t':;
+      case '\v':;
+      case '\f':;
+      case '\r':;
+      case '\e':
+        s[i] = ' ';
+        break;
+      default:;
+    }
+  }
+}
+
+void squeeze_whitespaces(char* s) {
+  // Схлопываем все последовательности проблов в единственный.
+  int j = 0;
+  for (int i = 0; s[i] != '\0'; ++i) {
+    while (s[i] == ' ' && s[i + 1] == ' ' && s[i + 1] != '\0') ++i;
+    s[j++] = s[i];
+  }
+  s[j] = 0;
+}
+
+void newline_ascii_to_unicode(char* text_buf, size_t buf_max_len) {
   char buf[buf_max_len];
   int j = 0;
   for (int i = 0; i < strlen(text_buf), j < buf_max_len; ++i, ++j) {
@@ -532,6 +513,25 @@ char* newline_ascii_to_unicode(char* text_buf, size_t buf_max_len) {
         buf[j++] = unicode_newline[k];
     }
     buf[j] = c;
+  }
+  buf[j] = 0;
+  strcpy(text_buf, buf);
+}
+
+void json_safe(char* text_buf, size_t buf_max_len) {
+  char buf[buf_max_len];
+  int j = 0;
+  for (int i = 0; i < strlen(text_buf), j < buf_max_len; ++i, ++j) {
+    const char c = text_buf[i];
+    if (c == '\n') {
+      buf[j++] = '\\';
+      buf[j++] = '\\';
+      buf[j] = 'n';
+    } else if (c == '"') {
+      buf[j++] = '\\';
+      buf[j] = '"';
+    } else
+      buf[j] = c;
   }
   buf[j] = 0;
   strcpy(text_buf, buf);

@@ -42,17 +42,17 @@ unsigned long long count_rss_recurse(unsigned long long rss, const pid_t pid,
 
 // Удаляет управляющие последовательности (ANSI escape code)
 // т.е. всё между символами \033[ и m, включая их самих.
-char* strip_ansi_escape_codes(char* s);
+void strip_ansi_escape_codes(char* s);
 
-char* nonprintable_to_whitespace(char* s);
+void nonprintable_to_whitespace(char* s);
 
-char* squeeze_whitespaces(char* s);
+void squeeze_whitespaces(char* s);
 
 // Переводит '\n' в '&#13;&#10;' (CRLF) для вставки в title, например.
-char* newline_ascii_to_unicode(char* text_buf, size_t buf_max_len);
+void newline_ascii_to_unicode(char* text_buf, size_t buf_max_len);
 
 // dst должна быть минимум в два раза больше src на случай если всё придётся
 // экранировать!
-char* json_safe(char* text_buf, size_t buf_max_len);
+void json_safe(char* text_buf, size_t buf_max_len);
 
 #endif  // HELPERS_H
