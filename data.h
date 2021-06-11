@@ -31,7 +31,7 @@ struct Process {
 
   size_t circular_buffer_pos;
   char circular_buffer[cirbuf_size];  // TODO сделать независимыми,пока
-  char previous_exit_log[cirbuf_size * 2];  // это дожны быть в точно больше
+  char log[cirbuf_size * 2];  // это дожны быть в точно больше
 
   pid_t pid;
   unsigned int restarts_counter;

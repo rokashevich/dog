@@ -46,13 +46,18 @@ void strip_ansi_escape_codes(char* s);
 
 void nonprintable_to_whitespace(char* s);
 
-void squeeze_whitespaces(char* s);
+void strip_whitespaces(char* s);
+
+void strip_nonascii(char* s);
 
 // Переводит '\n' в '&#13;&#10;' (CRLF) для вставки в title, например.
 void newline_ascii_to_unicode(char* text_buf, size_t buf_max_len);
 
-// dst должна быть минимум в два раза больше src на случай если всё придётся
-// экранировать!
-void json_safe(char* text_buf, size_t buf_max_len);
+void escape_json(char* s);
+
+void tail(char* s, int lines);
+
+// Копирет src в dst, обрезая src с головы, если src длиннее dst.
+void copy_tail(char* dst, int dst_siz, char* src);
 
 #endif  // HELPERS_H

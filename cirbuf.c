@@ -3,11 +3,12 @@
 #include <stdio.h>
 #include <string.h>
 
-void cirbuf_takeout(const char* src, size_t pos, char* dst) {
-  const size_t offset = cirbuf_size - pos;
+void cirbuf_takeout(const char* src, size_t pos, char* dst, int siz) {
+  const size_t offset = siz - pos;
   memcpy(dst, src + pos, offset);
   memcpy(dst + offset, src, pos);
-  dst[cirbuf_size - 1] = 0;
+  dst[offset] = '#';
+  dst[siz - 1] = 0;
 }
 
 void cirbuf_fill(char* src, size_t* pos, int c) {

@@ -469,7 +469,6 @@ void strip_ansi_escape_codes(char* s) {
     }
   }
   s[j - inside] = '\0';
-  return s;
 }
 
 void nonprintable_to_whitespace(char* s) {
@@ -489,14 +488,36 @@ void nonprintable_to_whitespace(char* s) {
   }
 }
 
-void squeeze_whitespaces(char* s) {
-  // Схлопываем все последовательности проблов в единственный.
-  int j = 0;
+void strip_whitespaces(char* s) {
+  int j;
+  // Удаляем все пробелы в начале s, следующие за и после \n, и в конце s.
+  j = 0;
   for (int i = 0; s[i] != '\0'; ++i) {
     while (s[i] == ' ' && s[i + 1] == ' ' && s[i + 1] != '\0') ++i;
     s[j++] = s[i];
   }
   s[j] = 0;
+
+  j = 0;
+  for (int i = 0; s[i] != '\0'; ++i) {
+    if (i == 0 && (s[i] == ' ' || s[i] == '\n'))
+      ++i;
+    else if (s[i] == ' ' && s[i + 1] == '\n')
+      ++i;
+    else if (s[i] == ' ' && i != 0 && s[i - 1] == '\n')
+      ++i;
+    else if (s[i] == ' ' && s[i + 1] == '\0')
+      ++i;
+    s[j++] = s[i];
+  }
+}
+
+void strip_nonascii(char* s) {
+  int j = 0;
+  for (int i = 0; s[i] != 0; ++i) {
+    if (s[i] > 127) ++j;
+    s[i] = s[j];
+  }
 }
 
 void newline_ascii_to_unicode(char* text_buf, size_t buf_max_len) {
@@ -511,28 +532,70 @@ void newline_ascii_to_unicode(char* text_buf, size_t buf_max_len) {
       if (remaining_len < unicode_newline_len) break;
       for (int k = 0; k < unicode_newline_len; k++)
         buf[j++] = unicode_newline[k];
-    }
-    buf[j] = c;
-  }
-  buf[j] = 0;
-  strcpy(text_buf, buf);
-}
-
-void json_safe(char* text_buf, size_t buf_max_len) {
-  char buf[buf_max_len];
-  int j = 0;
-  for (int i = 0; i < strlen(text_buf), j < buf_max_len; ++i, ++j) {
-    const char c = text_buf[i];
-    if (c == '\n') {
-      buf[j++] = '\\';
-      buf[j++] = '\\';
-      buf[j] = 'n';
-    } else if (c == '"') {
-      buf[j++] = '\\';
-      buf[j] = '"';
     } else
       buf[j] = c;
   }
   buf[j] = 0;
   strcpy(text_buf, buf);
+}
+
+void escape_json(char* s) {
+  const int len_orig = strlen(s);
+  const char escape_symbols[] = {'\\', '"', 0};
+  const char control_symbols[2][3] = {{'\n', '\t', 0}, {'n', 't', 0}};
+  int extra_space_needed = 0;
+  for (int i = 0; s[i] != '\0'; ++i) {
+    for (int j = 0; escape_symbols[j] != 0; ++j) {
+      if (s[i] == escape_symbols[j]) {
+        ++extra_space_needed;
+        break;
+      }
+    }
+    for (int j = 0; control_symbols[0][j] != 0; ++j) {
+      if (s[i] == control_symbols[0][j]) {
+        ++extra_space_needed;
+        break;
+      }
+    }
+  }
+
+  char buf[len_orig + extra_space_needed];
+  int j = 0;
+  for (int i = 0; s[i] != '\0'; ++i, ++j) {
+    char current_char = s[i];
+    for (int k = 0; escape_symbols[k] != 0; ++k) {
+      if (s[i] == escape_symbols[k]) {
+        buf[j++] = '\\';
+        break;
+      }
+    }
+    for (int k = 0; control_symbols[0][k] != 0; ++k) {
+      if (s[i] == control_symbols[0][k]) {
+        buf[j++] = '\\';
+        current_char = control_symbols[1][k];
+        break;
+      }
+    }
+    buf[j] = current_char;
+  }
+  buf[j] = '\0';
+  const int padding = strlen(buf) - len_orig;
+  strcpy(s, buf + padding);
+}
+
+void tail(char* s, int lines) {
+  char* tail = strrchr(s, '\n');
+  if (!tail) return;
+  int counter = 0;
+  for (; tail != s; --tail) {
+    if (*tail == '\n') ++counter;
+    if (counter == lines) break;
+  }
+  strcpy(s, tail);
+}
+
+void copy_tail(char* dst, int dst_siz, char* src) {
+  const int src_siz = strlen(src);
+  const int padding = dst_siz < src_siz ? src_siz - dst_siz : 0;
+  strcpy(dst, src + padding);
 }

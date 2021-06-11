@@ -12,16 +12,21 @@ class bcolors:
 counter = 0
 while True:
     counter += 1
+    n = str(counter)
     sys.stdout.write(
-        "                   s    p    a     c     e                  ")
+        f"{bcolors.OK}   <   {n}   р  у  с  с  к  и  й    >      {bcolors.RESET}\n")
+    sys.stdout.write(">>>"+str(counter)+"<<<\n")
+    sys.stdout.write("                s    p    a     c          e        \n")
+    sys.stdout.write(f" {n} {bcolors.OK}English  English \n{bcolors.RESET}")
+    # sys.stdout.write(
+    #     f" {n} {bcolors.OK}Русский  р\nу\nс\nс\nк\nи\nй\n \n{bcolors.RESET}")
     sys.stdout.write(
-        str(counter)+f" {bcolors.OK}English English English{bcolors.RESET}\n")
-    sys.stdout.write(str(counter) +
-                     f" {bcolors.WARNING}Русский русский русский{bcolors.RESET}\n")
+        f" {n} {bcolors.OK}русский русский{bcolors.RESET}")
     sys.stderr.write(
-        str(counter)+f" {bcolors.FAIL}M\nI\nS\nC{bcolors.RESET}\n")
+        f" {bcolors.OK}   111\n222\n     333("+str(counter)+f")\n{bcolors.RESET}")
+    sys.stdout.write("[[["+str(counter)+"]]]\n")
     sys.stdout.flush()
     sys.stderr.flush()
-    time.sleep(0.1)
-    # if counter == 100:
-    #     break
+    time.sleep(0.01)
+    if counter == 1000:
+        break

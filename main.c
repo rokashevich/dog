@@ -177,7 +177,7 @@ void gen_json(struct Data *data) {
     snprintf(b, s, "%u", process->restarts_counter);
     p = qstrcat(p, b);
     p = qstrcat(p, ",\"log\":\"");
-    p = qstrcat(p, process->previous_exit_log);
+    p = qstrcat(p, process->log);
     p = qstrcat(p, "\"");
 
     p = qstrcat(p, "}");
@@ -321,28 +321,31 @@ void *process_worker(void *voidprocess) {
       break;
     }
 
-    // Процесс завершился самопроизвольно - перезапускаем!
+    // Процесс завершился самопроизвольно - сохраняем лог и перезапускаем.
+    const int lines = 20;  // Сколько последних строчек сохранить -> в конфиг!
     process->restarts_counter++;
-    strcpy(process->previous_exit_log, reason);
+    const int reason_len = strlen(reason);  // Длина текстовки причины падения.
+    char takeout[cirbuf_size + 1 + reason_len];  // Под лог + \n + причина.
     cirbuf_takeout(process->circular_buffer, process->circular_buffer_pos,
-                   process->previous_exit_log + strlen(reason));
-    const int buf_max_len = sizeof(process->previous_exit_log) /
-                            sizeof(*process->previous_exit_log);
+                   takeout, cirbuf_size);
+    strip_ansi_escape_codes(takeout);     // Не увеличит takeout.
+    nonprintable_to_whitespace(takeout);  // Не увеличит takeout.
+    strip_whitespaces(takeout);           // Не увеличит takeout.
+    tail(takeout, lines);                 // Не увеличит takeout.
+    sprintf(takeout, "%s\n%s", takeout, reason);  // Размер ассчитан выше!
+    escape_json(takeout);
+    copy_tail(process->log, sizeof(process->log) / sizeof(*process->log),
+              takeout);
 
-    strip_ansi_escape_codes(process->previous_exit_log);
-    nonprintable_to_whitespace(process->previous_exit_log);
-    squeeze_whitespaces(process->previous_exit_log);
-    newline_ascii_to_unicode(process->previous_exit_log, buf_max_len);
-    json_safe(process->previous_exit_log, buf_max_len);
+    // newline_ascii_to_unicode(process->previous_exit_log, buf_max_len);
+    // json_safe(process->log, buf_max_len);
 
     // for (int i = 0; i < sizeof(process->circular_buffer) /
     //                         sizeof(*process->circular_buffer);
     //      ++i) {
     //   printf("[%c]", process->circular_buffer[i]);
     // }
-    printf("\n");
-    w("die %s %d %s", process->cmd, process->restarts_counter,
-      process->previous_exit_log);
+    w("die %s %d %s", process->cmd, process->restarts_counter, process->log);
     // const size_t n = strlen(process->previous_exit_log);
     // char s[n];
     // strcpy(s, process->previous_exit_log);
@@ -396,7 +399,7 @@ void handle_watch(struct mg_connection *nc, struct http_message *hm) {
   strncpy(process->cmd, buf, sizeof process->cmd / sizeof *process->cmd);
 
   cirbuf_fill(process->circular_buffer, &process->circular_buffer_pos, ' ');
-  memset(process->previous_exit_log, '\0', sizeof(process->previous_exit_log));
+  memset(process->log, '\0', sizeof(process->log));
 
   process->restarts_counter = 0;
   process->pid = 0;
