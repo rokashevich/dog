@@ -476,10 +476,8 @@ void nonprintable_to_whitespace(char* s) {
     switch (s[i]) {
       case '\a':;
       case '\b':;
-      case '\t':;
       case '\v':;
       case '\f':;
-      case '\r':;
       case '\e':
         s[i] = ' ';
         break;
@@ -488,28 +486,27 @@ void nonprintable_to_whitespace(char* s) {
   }
 }
 
-void strip_whitespaces(char* s) {
-  int j;
-  // Удаляем все пробелы в начале s, следующие за и после \n, и в конце s.
-  j = 0;
-  for (int i = 0; s[i] != '\0'; ++i) {
-    while (s[i] == ' ' && s[i + 1] == ' ' && s[i + 1] != '\0') ++i;
+void deduplicate_space(char* s) {
+  // Схлопываем повторные пробельные символы в один ' ' или '\n'.
+  int j = 0;
+  for (int i = 0; s[i] != 0; ++i) {
+    int space = 0;
+    char sep = ' ';
+    while (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r') {
+      space = 1;
+      if (s[i] == '\n' || s[i] == '\r') sep = '\n';
+      ++i;
+    }
+    if (space) {
+      if (j > 0 && s[i] != 0) {
+        s[j++] = sep;
+      } else if (s[i] == 0) {
+        break;
+      }
+    }
     s[j++] = s[i];
   }
   s[j] = 0;
-
-  j = 0;
-  for (int i = 0; s[i] != '\0'; ++i) {
-    if (i == 0 && (s[i] == ' ' || s[i] == '\n'))
-      ++i;
-    else if (s[i] == ' ' && s[i + 1] == '\n')
-      ++i;
-    else if (s[i] == ' ' && i != 0 && s[i - 1] == '\n')
-      ++i;
-    else if (s[i] == ' ' && s[i + 1] == '\0')
-      ++i;
-    s[j++] = s[i];
-  }
 }
 
 void strip_nonascii(char* s) {
@@ -539,7 +536,7 @@ void newline_ascii_to_unicode(char* text_buf, size_t buf_max_len) {
   strcpy(text_buf, buf);
 }
 
-void escape_json(char* s) {
+void escape_json(char* s, int siz) {
   const int len_orig = strlen(s);
   const char escape_symbols[] = {'\\', '"', 0};
   const char control_symbols[2][3] = {{'\n', '\t', 0}, {'n', 't', 0}};
@@ -559,10 +556,10 @@ void escape_json(char* s) {
     }
   }
 
-  char buf[len_orig + extra_space_needed];
+  const int buf_siz = len_orig + extra_space_needed;
+  char buf[buf_siz];
   int j = 0;
-  for (int i = 0; s[i] != '\0'; ++i, ++j) {
-    char current_char = s[i];
+  for (int i = 0; s[i] != 0; ++i) {
     for (int k = 0; escape_symbols[k] != 0; ++k) {
       if (s[i] == escape_symbols[k]) {
         buf[j++] = '\\';
@@ -572,14 +569,15 @@ void escape_json(char* s) {
     for (int k = 0; control_symbols[0][k] != 0; ++k) {
       if (s[i] == control_symbols[0][k]) {
         buf[j++] = '\\';
-        current_char = control_symbols[1][k];
+        s[i] = control_symbols[1][k];
         break;
       }
     }
-    buf[j] = current_char;
+    buf[j++] = s[i];
   }
-  buf[j] = '\0';
-  const int padding = strlen(buf) - len_orig;
+  buf[j] = 0;
+  const int required_siz = strlen(buf);
+  const int padding = buf_siz > required_siz ? 0 : required_siz - buf_siz;
   strcpy(s, buf + padding);
 }
 

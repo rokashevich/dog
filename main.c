@@ -325,15 +325,16 @@ void *process_worker(void *voidprocess) {
     const int lines = 20;  // Сколько последних строчек сохранить -> в конфиг!
     process->restarts_counter++;
     const int reason_len = strlen(reason);  // Длина текстовки причины падения.
-    char takeout[cirbuf_size + 1 + reason_len];  // Под лог + \n + причина.
+    const int takeout_siz = cirbuf_size + 1 + reason_len;
+    char takeout[takeout_siz];  // Под лог + \n + причина.
     cirbuf_takeout(process->circular_buffer, process->circular_buffer_pos,
                    takeout, cirbuf_size);
     strip_ansi_escape_codes(takeout);     // Не увеличит takeout.
     nonprintable_to_whitespace(takeout);  // Не увеличит takeout.
-    strip_whitespaces(takeout);           // Не увеличит takeout.
-    tail(takeout, lines);                 // Не увеличит takeout.
     sprintf(takeout, "%s\n%s", takeout, reason);  // Размер ассчитан выше!
-    escape_json(takeout);
+    deduplicate_space(takeout);  // Не увеличит takeout.
+    tail(takeout, lines);        // Не увеличит takeout.
+    escape_json(takeout, takeout_siz);
     copy_tail(process->log, sizeof(process->log) / sizeof(*process->log),
               takeout);
 
@@ -345,7 +346,7 @@ void *process_worker(void *voidprocess) {
     //      ++i) {
     //   printf("[%c]", process->circular_buffer[i]);
     // }
-    w("die %s %d %s", process->cmd, process->restarts_counter, process->log);
+    w("die %d %s %s", process->restarts_counter, process->cmd, process->log);
     // const size_t n = strlen(process->previous_exit_log);
     // char s[n];
     // strcpy(s, process->previous_exit_log);

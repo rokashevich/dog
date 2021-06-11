@@ -46,14 +46,14 @@ void strip_ansi_escape_codes(char* s);
 
 void nonprintable_to_whitespace(char* s);
 
-void strip_whitespaces(char* s);
+void deduplicate_space(char* s);
 
 void strip_nonascii(char* s);
 
 // Переводит '\n' в '&#13;&#10;' (CRLF) для вставки в title, например.
 void newline_ascii_to_unicode(char* text_buf, size_t buf_max_len);
 
-void escape_json(char* s);
+void escape_json(char* s, int siz);
 
 void tail(char* s, int lines);
 

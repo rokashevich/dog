@@ -7,7 +7,6 @@ void cirbuf_takeout(const char* src, size_t pos, char* dst, int siz) {
   const size_t offset = siz - pos;
   memcpy(dst, src + pos, offset);
   memcpy(dst + offset, src, pos);
-  dst[offset] = '#';
   dst[siz - 1] = 0;
 }
 
